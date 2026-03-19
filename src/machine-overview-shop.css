@@ -1,0 +1,60 @@
+.machine-overview-shop-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(171, 192, 226, 0.28),
+      transparent 28%
+    ),
+    linear-gradient(180deg, #f8fbff 0%, #f1f5fb 100%);
+}
+
+.machine-overview-shop-board {
+  position: relative;
+  isolation: isolate;
+}
+
+.machine-overview-shop-board::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    circle,
+    rgba(112, 132, 168, 0.22) 1.2px,
+    transparent 1.2px
+  );
+  background-position: center;
+  background-size: 22px 22px;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.machine-overview-shop-board > * {
+  position: relative;
+  z-index: 1;
+}
+
+.machine-overview-shop-card {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+@keyframes machine-overview-shop-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.98);
+  }
+}
+
+.machine-overview-shop-status-live {
+  animation: machine-overview-shop-pulse 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .machine-overview-shop-status-live {
+    animation: none;
+  }
+}
