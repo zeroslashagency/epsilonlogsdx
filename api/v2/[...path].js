@@ -27,13 +27,10 @@ const BLOCKED_REQUEST_HEADERS = new Set([
 ]);
 
 export default async function handler(req, res) {
-  const { path = [] } = req.query;
-  const pathStr = Array.isArray(path) ? path.join("/") : path;
-
-  // Build the URL – preserve all query params except `path`
-  const params = new URLSearchParams(req.query);
-  params.delete("path");
-  const targetUrl = `${BACKEND_BASE}/${pathStr}${params.toString() ? `?${params.toString()}` : ""}`;
+  // req.url contains the path and query string (e.g., /api/v2/device-log?page=1)
+  // We replace the `/api/v2` prefix and append it to the backend base.
+  const urlPathAndQuery = req.url.replace(/^\/api\/v2/, '');
+  const targetUrl = `${BACKEND_BASE}${urlPathAndQuery}`;
 
   // Build forwarded headers, stripping the blocked ones
   const forwardedHeaders = {};
