@@ -12,4 +12,13 @@ export default defineConfig({
       "@": path.resolve(rootDirectory, "./src"),
     },
   },
+  server: {
+    proxy: {
+      "/api/v2": {
+        target: "https://app.epsilonengg.in",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 });

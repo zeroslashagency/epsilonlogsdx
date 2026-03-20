@@ -39,6 +39,51 @@
   -webkit-backdrop-filter: blur(10px);
 }
 
+@keyframes machine-overview-shop-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.machine-overview-shop-card-enter {
+  animation: machine-overview-shop-card-enter 0.36s ease-out both;
+}
+
+@keyframes machine-overview-shop-pause-card {
+  0%,
+  100% {
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(255, 252, 230, 0.98));
+    box-shadow:
+      0 24px 55px -36px rgba(245, 158, 11, 0.65),
+      inset 0 0 0 1px rgba(253, 230, 138, 0.85);
+  }
+  50% {
+    background:
+      linear-gradient(145deg, rgba(255, 248, 166, 0.98), rgba(255, 255, 255, 0.96));
+    box-shadow:
+      0 24px 55px -28px rgba(245, 158, 11, 0.85),
+      inset 0 0 0 1px rgba(251, 191, 36, 0.9);
+  }
+}
+
+@keyframes machine-overview-shop-pause-timer {
+  0%,
+  100% {
+    color: #78350f;
+    text-shadow: 0 0 0 rgba(245, 158, 11, 0);
+  }
+  50% {
+    color: #92400e;
+    text-shadow: 0 0 16px rgba(251, 191, 36, 0.45);
+  }
+}
+
 @keyframes machine-overview-shop-pulse {
   0%,
   100% {
@@ -49,11 +94,21 @@
   }
 }
 
+.machine-overview-shop-card--pause {
+  animation: machine-overview-shop-pause-card 1.1s ease-in-out infinite;
+}
+
+.machine-overview-shop-pause-timer {
+  animation: machine-overview-shop-pause-timer 1.1s ease-in-out infinite;
+}
+
 .machine-overview-shop-status-live {
   animation: machine-overview-shop-pulse 2.8s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .machine-overview-shop-card--pause,
+  .machine-overview-shop-pause-timer,
   .machine-overview-shop-status-live {
     animation: none;
   }

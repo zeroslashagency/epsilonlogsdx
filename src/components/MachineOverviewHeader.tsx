@@ -1,30 +1,33 @@
 import { RefreshCcw } from "lucide-react";
 
 interface MachineOverviewHeaderProps {
-  boardSummary: string;
   isRefreshing: boolean;
+  lastRefreshLabel: string;
   onRefresh: () => void;
 }
 
 export function MachineOverviewHeader({
-  boardSummary,
   isRefreshing,
+  lastRefreshLabel,
   onRefresh,
 }: MachineOverviewHeaderProps) {
   return (
     <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">
-          Shop Floor View
+          Single-Machine Pause Monitor
         </p>
         <h1 className="text-3xl font-semibold tracking-[-0.045em] text-slate-800 sm:text-4xl">
-          Machine Overview
+          SHOP FLOOR DASHBOARD
         </h1>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 lg:justify-end">
         <span className="inline-flex min-h-11 items-center rounded-full border border-white/80 bg-white/80 px-4 py-2 text-sm font-medium text-slate-500 shadow-[0_12px_35px_-24px_rgba(15,23,42,0.55)] backdrop-blur">
-          {boardSummary}
+          Auto refresh 30s
+        </span>
+        <span className="inline-flex min-h-11 items-center rounded-full border border-white/80 bg-white/80 px-4 py-2 text-sm font-medium text-slate-500 shadow-[0_12px_35px_-24px_rgba(15,23,42,0.55)] backdrop-blur">
+          {lastRefreshLabel}
         </span>
         <button
           type="button"

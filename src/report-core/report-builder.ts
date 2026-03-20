@@ -1,0 +1,302 @@
+import { DeviceLogEntry, JobBlock, JobType, OperatorSummary, ReportConfig, ReportRow, ReportStats, WoBreakdown, WoDetails } from "./report-types";
+import { normalizeLogs } from "./log-normalizer";
+import { segmentLogs } from "./wo-segmenter";
+import { pairSpindleCycles } from "./spindle-pairer";
+import { groupCyclesIntoJobs } from "./job-grouper";
+import { injectComputedRows } from "./computed-row-injector";
+import { annotateExtensions } from "./extension-annotator";
+import { buildKeySplitDisableWindows, getKeyActionSummary, isKeyAction } from "./key-actions";
+
+/**
+ * Orchestrates the report generation pipeline.
+ */
+export function buildReport(
+    rawLogs: DeviceLogEntry[],
+    woDetailsMap: Map<number, WoDetails>,
+    config: ReportConfig
+): { rows: ReportRow[]; stats: ReportStats } {
+
+    // 1. Normalize (dedupe, sort ASC)
+    const logs = normalizeLogs(rawLogs);
+    // 2. Segment by WO_START..WO_STOP
+    const segments = segmentLogs(logs);
+
+    let allRows: ReportRow[] = [];
+    const woBreakdowns: WoBreakdown[] = [];
+    const operatorMap = new Map<string, {
+        woCount: number;
+        totalJobs: number;
+        totalCycles: number;
+        totalCuttingSec: number;
+        totalPauseSec: number;
+    }>();
+
+    let totalJobs = 0;
+    let totalCycles = 0;
+    let totalCuttingSec = 0;
+    let totalPauseSec = 0;
+    let totalLoadingUnloadingSec = 0;
+    let totalIdleSec = 0;
+    let totalWoDurationSec = 0;
+    let totalAllotedQty = 0;
+    let totalOkQty = 0;
+    let totalRejectQty = 0;
+
+    // 3. Process each segment
+    for (const segment of segments) {
+        // FIX: Allow all job types to be processed, but distinguish logic inside
+        if (segment.jobType !== "Unknown") {
+            // A. Pair Cycles & Pauses (Always useful for raw metrics)
+            pairSpindleCycles(segment);
+
+            let segCuttingSec = segment.spindleCycles.reduce((sum, c) => sum + c.durationSec, 0);
+            const segPauseSec = segment.pausePeriods.reduce((sum, p) => sum + p.durationSec, 0);
+
+            totalCycles += segment.spindleCycles.length;
+            totalCuttingSec += segCuttingSec;
+            totalPauseSec += segPauseSec;
+
+            // B. Get WO Details
+            const details = woDetailsMap.get(segment.woId) || {
+                id: segment.woId,
+                pcl: null,
+                start_time: null,
+                end_time: null,
+                start_uid: null,
+                stop_uid: null,
+                extensions: [],
+                wo_id_str: String(segment.woId),
+                part_no: "",
+                start_name: "",
+                stop_name: "",
+                start_comment: "",
+                stop_comment: "",
+                setting: "",
+                alloted_qty: 0,
+                ok_qty: 0,
+                reject_qty: 0,
+                device_id: 0,
+                duration: 0,
+            };
+
+            // Ensure woDetails carries the job_type from the segment logs
+            if (details.job_type == null && segment.rawJobType != null) {
+                details.job_type = segment.rawJobType;
+            }
+
+            totalWoDurationSec += details.duration;
+            totalAllotedQty += details.alloted_qty;
+            totalOkQty += details.ok_qty;
+            totalRejectQty += details.reject_qty;
+
+            // C. Group into Jobs
+            const splitDisableWindows = buildKeySplitDisableWindows(segment.logs);
+            let blocks: JobBlock[] = [];
+
+            if (segment.rawJobType && segment.rawJobType !== JobType.PRODUCTION) {
+                // SPECIAL Job Types: Single Block
+                // If API provides duration, use it. Else calculate from first/last log.
+                let duration = details.duration || 0;
+                if (duration === 0 && segment.logs.length > 0) {
+                    const start = new Date(segment.logs[0]!.log_time).getTime();
+                    const end = new Date(segment.logs[segment.logs.length - 1]!.log_time).getTime();
+                    duration = (end - start) / 1000;
+                }
+
+                blocks.push({
+                    label: (segment.jobType || "PROCESS").toUpperCase() + " PROCESS",
+                    cycles: [], // No cycles needed for special types
+                    totalSec: duration,
+                    varianceSec: 0,
+                    pcl: null
+                });
+            } else {
+                // PRODUCTION: Standard cycle grouping
+                blocks = groupCyclesIntoJobs(segment.spindleCycles, details, {
+                    toleranceSec: config.toleranceSec,
+                    splitDisableWindows,
+                });
+
+                // FALLBACK: Non-spindle machine — 0 cycles but has ok_qty and PCL
+                if (blocks.length === 0 && details.ok_qty > 0) {
+                    const pclSec = details.pcl || 0;
+                    const woDurationSec = details.duration || 0;
+                    const estimatedCuttingSec = Math.max(0, woDurationSec - segPauseSec);
+
+                    if (pclSec > 0 && woDurationSec > 0) {
+                        // Single consolidated estimated block showing ok_qty parts
+                        blocks.push({
+                            label: `ESTIMATED — ${details.ok_qty} parts`,
+                            cycles: [],
+                            totalSec: estimatedCuttingSec,
+                            varianceSec: null,
+                            pcl: pclSec,
+                            isEstimated: true,
+                        });
+                        segCuttingSec = estimatedCuttingSec;
+                        totalCuttingSec += estimatedCuttingSec;
+                        totalCycles += details.ok_qty;
+                    } else if (woDurationSec > 0) {
+                        // No PCL but has duration — single estimated block
+                        blocks.push({
+                            label: `ESTIMATED — ${details.ok_qty} parts`,
+                            cycles: [],
+                            totalSec: estimatedCuttingSec,
+                            varianceSec: null,
+                            pcl: null,
+                            isEstimated: true,
+                        });
+                        segCuttingSec = estimatedCuttingSec;
+                        totalCuttingSec += estimatedCuttingSec;
+                        totalCycles += details.ok_qty;
+                    }
+                }
+            }
+            // For estimated blocks: jobs = ok_qty (but only 1 display row)
+            const hasEstimated = blocks.some(b => b.isEstimated);
+            const segJobCount = hasEstimated ? details.ok_qty : blocks.length;
+            totalJobs += segJobCount;
+
+            // D. Inject Computed Rows (pass woDetails for headers/summaries)
+            let rows = injectComputedRows(segment, blocks, details);
+
+            // E. Annotate break/extension comments
+            rows = annotateExtensions(rows, details);
+
+            // F. Compute loading & idle from computed rows
+            let segLoadingSec = 0;
+            let segIdleSec = 0;
+            for (const row of rows) {
+                if (!row.isComputed || !row.label || typeof row.durationSec !== "number") {
+                    continue;
+                }
+
+                if (row.label.toLowerCase().includes("loading")) {
+                    segLoadingSec += row.durationSec;
+                } else if (row.label.toLowerCase().includes("idle") || row.label.toLowerCase().includes("break")) {
+                    segIdleSec += row.durationSec;
+                }
+            }
+            totalLoadingUnloadingSec += segLoadingSec;
+            totalIdleSec += segIdleSec;
+
+            // G. Build WO Breakdown
+            const operatorName = details.start_name || "Unknown";
+            woBreakdowns.push({
+                woId: details.wo_id_str,
+                deviceId: details.device_id,
+                partNo: details.part_no,
+                operator: operatorName,
+                setting: details.setting,
+                jobType: segment.jobType,
+                jobs: hasEstimated ? details.ok_qty : blocks.length,
+                cycles: segment.spindleCycles.length,
+                cuttingSec: segCuttingSec,
+                pauseSec: segPauseSec,
+                loadingSec: segLoadingSec,
+                allotedQty: details.alloted_qty,
+                okQty: details.ok_qty,
+                rejectQty: details.reject_qty,
+                pcl: details.pcl,
+                avgCycleSec: segment.spindleCycles.length > 0
+                    ? segCuttingSec / segment.spindleCycles.length
+                    : 0,
+                startTime: details.start_time
+                    ? new Date(details.start_time).toLocaleString("en-GB")
+                    : "",
+                endTime: details.end_time
+                    ? new Date(details.end_time).toLocaleString("en-GB")
+                    : "",
+                durationSec: details.duration,
+            });
+
+            // H. Accumulate operator stats
+            const existing = operatorMap.get(operatorName);
+            if (existing) {
+                existing.woCount += 1;
+                existing.totalJobs += blocks.length;
+                existing.totalCycles += segment.spindleCycles.length;
+                existing.totalCuttingSec += segCuttingSec;
+                existing.totalPauseSec += segPauseSec;
+            } else {
+                operatorMap.set(operatorName, {
+                    woCount: 1,
+                    totalJobs: blocks.length,
+                    totalCycles: segment.spindleCycles.length,
+                    totalCuttingSec: segCuttingSec,
+                    totalPauseSec: segPauseSec,
+                });
+            }
+
+            allRows.push(...rows);
+        } else {
+            // Unknown / orphan logs
+            for (const log of segment.logs) {
+                const keySummary = isKeyAction(log.action) ? getKeyActionSummary(log.action) : undefined;
+                allRows.push({
+                    rowId: `log-${log.log_id}`,
+                    logId: log.log_id,
+                    logTime: new Date(log.log_time),
+                    action: log.action,
+                    summary: keySummary,
+                    jobType: isKeyAction(log.action) ? "Manual Input" : "Unknown",
+                    originalLog: log,
+                    timestamp: new Date(log.log_time).getTime(),
+                });
+            }
+        }
+    }
+
+    // 4. Build operator summaries
+    const operatorSummaries: OperatorSummary[] = [];
+    operatorMap.forEach((data, name) => {
+        operatorSummaries.push({
+            name,
+            woCount: data.woCount,
+            totalJobs: data.totalJobs,
+            totalCycles: data.totalCycles,
+            totalCuttingSec: data.totalCuttingSec,
+            totalPauseSec: data.totalPauseSec,
+            avgCycleSec: data.totalCycles > 0
+                ? data.totalCuttingSec / data.totalCycles
+                : 0,
+        });
+    });
+
+    // 5. Calculate utilization
+    const machineUtilization = totalWoDurationSec > 0
+        ? Math.round((totalCuttingSec / totalWoDurationSec) * 100)
+        : 0;
+
+    const stats: ReportStats = {
+        totalJobs,
+        totalCycles,
+        totalCuttingSec,
+        totalPauseSec,
+        totalLoadingUnloadingSec,
+        totalIdleSec,
+        totalWoDurationSec,
+        machineUtilization,
+        totalAllotedQty,
+        totalOkQty,
+        totalRejectQty,
+        totalLogs: logs.length,
+        woBreakdowns,
+        operatorSummaries,
+    };
+
+    // 6. Reverse chronological sort (latest on top)
+    allRows.sort((a, b) => b.timestamp - a.timestamp);
+
+    // 7. Assign S.No — skip computed/banner rows
+    let sNoCounter = 1;
+    allRows.forEach((row) => {
+        if (row.isComputed || row.isWoHeader || row.isWoSummary || row.isPauseBanner) {
+            delete row.sNo; // empty S.No
+        } else {
+            row.sNo = sNoCounter++;
+        }
+    });
+
+    return { rows: allRows, stats };
+}

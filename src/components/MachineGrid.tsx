@@ -1,34 +1,30 @@
-import { motion } from "motion/react";
-
-import type { MachineCardRecord } from "../data/mockMachines";
+import type { MachineCardRecord } from "../data/dashboard-types";
 import { MachineCard } from "./MachineCard";
 
 interface MachineGridProps {
   machines: MachineCardRecord[];
-  selectedMachineId: number | null;
-  onSelect: (machine: MachineCardRecord) => void;
+  currentTimeMs: number;
 }
 
 export function MachineGrid({
   machines,
-  selectedMachineId,
-  onSelect,
+  currentTimeMs,
 }: MachineGridProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
       {machines.map((machine, index) => (
-        <motion.div
+        <div
           key={machine.machineId}
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.36, delay: index * 0.045 }}
+          className="machine-overview-shop-card-enter"
+          style={{
+            animationDelay: `${index * 45}ms`,
+          }}
         >
           <MachineCard
             machine={machine}
-            isSelected={machine.machineId === selectedMachineId}
-            onSelect={onSelect}
+            currentTimeMs={currentTimeMs}
           />
-        </motion.div>
+        </div>
       ))}
     </div>
   );
