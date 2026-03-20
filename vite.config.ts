@@ -18,6 +18,15 @@ export default defineConfig({
         target: "https://app.epsilonengg.in",
         changeOrigin: true,
         secure: false,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
+            // The backend returns 502 on any request that includes an Origin
+            // or Referer header. Browsers always send these on fetch() calls,
+            // but the Vite proxy does not strip them automatically.
+            proxyReq.removeHeader("origin");
+            proxyReq.removeHeader("referer");
+          });
+        },
       },
     },
   },
