@@ -375,6 +375,44 @@ function resolveStatusLabel(snapshot: MachineSnapshot): MachineCardRecord["statu
   return "LIVE";
 }
 
+function resolveSummaryStatusLabel(
+  snapshot: MachineSnapshot,
+  summary: MachineWoSummary | null,
+): MachineCardRecord["statusLabel"] {
+  if (snapshot.status === "PAUSED") {
+    return "PAUSED";
+  }
+
+  if (snapshot.status === "ERROR") {
+    return "ERROR";
+  }
+
+  if (summary) {
+    return summary.executionStatus;
+  }
+
+  return resolveStatusLabel(snapshot);
+}
+
+function resolveSummaryStatusMessage(
+  snapshot: MachineSnapshot,
+  summary: MachineWoSummary | null,
+): string {
+  if (snapshot.status === "PAUSED") {
+    return "";
+  }
+
+  if (summary?.executionStatus === "COMPLETE") {
+    return "Work order completed in the recent live window.";
+  }
+
+  if (summary?.executionStatus === "PROCESSING") {
+    return "Work order is paused or waiting for the next cycle.";
+  }
+
+  return snapshot.statusMessage;
+}
+
 function formatFallbackStatus(snapshot: MachineSnapshot): string {
   if (snapshot.status === "ERROR") {
     return "Request failed";
@@ -689,12 +727,12 @@ function buildMachineCardRecord(
     machineId: snapshot.machineId,
     variant: resolveCardVariant(snapshot),
     badgeLabel: resolveCardBadgeLabel(snapshot),
-    statusLabel: resolveStatusLabel(snapshot),
+    statusLabel: resolveSummaryStatusLabel(snapshot, matchingSummary),
     updatedLabel,
     operatorName,
     workOrderLabel,
     metrics,
-    footerLabel: snapshot.status === "PAUSED" ? "" : snapshot.statusMessage,
+    footerLabel: resolveSummaryStatusMessage(snapshot, matchingSummary),
     pauseStartedAt: snapshot.pauseStartedAt,
   };
 }

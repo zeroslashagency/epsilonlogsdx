@@ -52,6 +52,8 @@ const badgeClassMap: Record<MachineCardVariant, string> = {
 
 const statusClassMap: Record<MachineCardRecord["statusLabel"], string> = {
   LIVE: "border-emerald-300/90 bg-emerald-50/95 text-emerald-700",
+  PROCESSING: "border-amber-300 bg-amber-50/95 text-amber-700",
+  COMPLETE: "border-sky-300/90 bg-sky-50/95 text-sky-700",
   PAUSED: "border-amber-300 bg-white/95 text-amber-700",
   OFFLINE: "border-rose-300/90 bg-rose-50/95 text-rose-600",
   ERROR: "border-fuchsia-300/90 bg-fuchsia-50/95 text-fuchsia-700",

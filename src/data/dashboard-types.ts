@@ -6,7 +6,13 @@ export type MachineCardVariant =
   | "maintenance"
   | "offline";
 
-export type MachineStatusLabel = "LIVE" | "PAUSED" | "OFFLINE" | "ERROR";
+export type MachineStatusLabel =
+  | "LIVE"
+  | "PROCESSING"
+  | "COMPLETE"
+  | "PAUSED"
+  | "OFFLINE"
+  | "ERROR";
 
 export interface MachineMetric {
   label: string;
