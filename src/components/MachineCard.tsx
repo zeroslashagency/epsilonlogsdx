@@ -95,7 +95,7 @@ export function MachineCard({
   return (
     <article
       className={cn(
-        "machine-overview-shop-card relative flex min-h-[462px] w-full flex-col overflow-hidden rounded-[28px] border p-5 text-left",
+        "machine-overview-shop-card relative flex h-full w-full flex-col overflow-hidden rounded-[28px] border p-5 text-left",
         surfaceClassMap[machine.variant],
         isPaused && "machine-overview-shop-card--pause",
         isKeyAlert && "machine-overview-shop-card--key",
@@ -229,35 +229,14 @@ export function MachineCard({
         </div>
       )}
 
-      {!isAlertCard ? (
+      {!isAlertCard && hasPauseInsight ? (
         <div className="mt-5 h-10 flex items-center gap-3 text-[15px]">
-          <span
-            className={cn(
-              "inline-flex min-w-10 items-center justify-center rounded-full px-3 py-1 text-sm font-semibold transition-opacity",
-              hasPauseInsight
-                ? "border border-emerald-300/90 bg-emerald-50/95 text-emerald-700 shadow-[0_10px_20px_-18px_rgba(16,185,129,0.8)]"
-                : "border border-transparent bg-transparent text-transparent shadow-none",
-            )}
-            aria-hidden={!hasPauseInsight}
-          >
-            {hasPauseInsight ? machine.pauseCount : 0}
+          <span className="inline-flex min-w-10 items-center justify-center rounded-full border border-emerald-300/90 bg-emerald-50/95 px-3 py-1 text-sm font-semibold text-emerald-700 shadow-[0_10px_20px_-18px_rgba(16,185,129,0.8)] transition-opacity">
+            {machine.pauseCount}
           </span>
-          <p
-            className={cn(
-              "min-w-0 text-slate-600",
-              !machine.pauseReason && "invisible"
-            )}
-            aria-hidden={!machine.pauseReason}
-          >
+          <p className="min-w-0 text-slate-600">
             <span className="font-medium text-slate-500">Reason:</span>{" "}
-            <span
-              className={cn(
-                "font-medium",
-                hasPauseInsight ? "text-slate-700" : "text-slate-400",
-              )}
-            >
-              {reasonLabel}
-            </span>
+            <span className="font-medium text-slate-700">{reasonLabel}</span>
           </p>
         </div>
       ) : null}
