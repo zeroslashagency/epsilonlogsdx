@@ -5,6 +5,7 @@ export interface DeviceLogEntry {
   action: string;
   wo_id?: number | null;
   wo_name?: string | null;
+  part_no?: string | null;
   device_id: number;
   pcl?: string | number | null;
   start_name?: string | null;

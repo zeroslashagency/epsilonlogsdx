@@ -3,6 +3,7 @@ export type MachineCardVariant =
   | "setting"
   | "calibration"
   | "pause"
+  | "key"
   | "maintenance"
   | "offline";
 
@@ -11,6 +12,7 @@ export type MachineStatusLabel =
   | "PROCESSING"
   | "COMPLETE"
   | "PAUSED"
+  | "KEY ACTIVE"
   | "OFFLINE"
   | "ERROR";
 
@@ -27,7 +29,11 @@ export interface MachineCardRecord {
   updatedLabel: string;
   operatorName: string;
   workOrderLabel: string;
+  partNumber: string | null;
+  pauseCount: number;
+  pauseReason: string | null;
   metrics: MachineMetric[];
   footerLabel: string;
-  pauseStartedAt: string | null;
+  alertKind: "pause" | "key" | null;
+  alertStartedAt: string | null;
 }

@@ -15,6 +15,7 @@ import {
 } from "./liveMachineApi";
 import { formatDuration } from "../report-core/format-utils";
 import { buildReport } from "../report-core/report-builder";
+import { isKeyOffAction, isKeyOnAction } from "../report-core/key-actions";
 import type {
   DeviceLogEntry as ReportDeviceLogEntry,
   ReportConfig,
@@ -27,6 +28,7 @@ type MachineStatus =
   | "MAINTENANCE"
   | "CALIBRATION"
   | "PAUSED"
+  | "KEY"
   | "OFFLINE"
   | "ERROR";
 
@@ -46,12 +48,15 @@ interface MachineSnapshot {
   statusMessage: string;
   currentWoDisplayId: string | null;
   currentWoInternalId: number | null;
+  partNumber: string | null;
   operatorName: string | null;
   latestAction: string | null;
   latestTimestamp: number | null;
   jobTypeLabel: JobTypeLabel;
   pauseStartedAt: string | null;
   pauseReason: string | null;
+  keyStartedAt: string | null;
+  keyLastAction: "KEY_ON" | "KEY_OFF" | null;
   logs: DeviceLogEntry[];
   errorMessage: string | null;
 }
@@ -65,6 +70,7 @@ interface MachineWoAccumulator {
   woId: string;
   woDisplayId: string;
   machineId: number | null;
+  partNumber: string | null;
   operatorName: string;
   jobType: ReportJobType;
   pclText: string;
@@ -80,6 +86,7 @@ interface MachineWoSummary {
   woId: string;
   woDisplayId: string;
   machineId: number | null;
+  partNumber: string | null;
   operatorName: string;
   jobType: ReportJobType;
   pclText: string;
@@ -184,6 +191,34 @@ function resolvePauseReason(log: DeviceLogEntry | null): string | null {
   );
 }
 
+function resolvePauseInsight(
+  logs: readonly DeviceLogEntry[],
+  currentWoInternalId: number | null,
+): { pauseCount: number; pauseReason: string | null } {
+  const relevantPauseLogs = logs.filter((log) => {
+    if (normalizeText(log.action) !== "WO_PAUSE") {
+      return false;
+    }
+
+    if (currentWoInternalId === null) {
+      return true;
+    }
+
+    return log.wo_id === currentWoInternalId;
+  });
+
+  const latestPauseLog = relevantPauseLogs[0] ?? null;
+
+  return {
+    pauseCount: relevantPauseLogs.length,
+    pauseReason: resolvePauseReason(latestPauseLog),
+  };
+}
+
+function resolvePartNumber(log: DeviceLogEntry | null): string | null {
+  return normalizeText(log?.part_no);
+}
+
 function createBaseSnapshot(machineId: number): MachineSnapshot {
   return {
     machineId,
@@ -191,15 +226,57 @@ function createBaseSnapshot(machineId: number): MachineSnapshot {
     statusMessage: "No recent machine events.",
     currentWoDisplayId: null,
     currentWoInternalId: null,
+    partNumber: null,
     operatorName: null,
     latestAction: null,
     latestTimestamp: null,
     jobTypeLabel: "Unknown",
     pauseStartedAt: null,
     pauseReason: null,
+    keyStartedAt: null,
+    keyLastAction: null,
     logs: [],
     errorMessage: null,
   };
+}
+
+function resolveKeyState(logs: DeviceLogEntry[]): {
+  keyStartedAt: string | null;
+  keyLastAction: "KEY_ON" | "KEY_OFF" | null;
+} {
+  let keyStartedAt: string | null = null;
+  let keyLastAction: "KEY_ON" | "KEY_OFF" | null = null;
+
+  const chronologicalLogs = [...logs].sort((left, right) => {
+    const leftTs = new Date(left.log_time).getTime();
+    const rightTs = new Date(right.log_time).getTime();
+
+    if (leftTs !== rightTs) {
+      return leftTs - rightTs;
+    }
+
+    return (left.log_id ?? left.id ?? 0) - (right.log_id ?? right.id ?? 0);
+  });
+
+  for (const log of chronologicalLogs) {
+    const action = normalizeText(log.action);
+    if (!action) {
+      continue;
+    }
+
+    if (isKeyOnAction(action)) {
+      keyStartedAt = log.log_time;
+      keyLastAction = "KEY_ON";
+      continue;
+    }
+
+    if (isKeyOffAction(action)) {
+      keyStartedAt = null;
+      keyLastAction = "KEY_OFF";
+    }
+  }
+
+  return { keyStartedAt, keyLastAction };
 }
 
 function buildMachineSnapshot(
@@ -227,6 +304,7 @@ function buildMachineSnapshot(
   const latestAction = normalizeText(latestLog.action);
   const jobTypeLabel = mapRawJobTypeToLabel(latestLog.job_type);
   const operatorName = normalizeText(latestLog.start_name);
+  const keyState = resolveKeyState(logs);
 
   const snapshot: MachineSnapshot = {
     ...base,
@@ -235,6 +313,7 @@ function buildMachineSnapshot(
       typeof latestLog.wo_id === "number" && latestLog.wo_id > 0
         ? latestLog.wo_id
         : null,
+    partNumber: resolvePartNumber(latestLog),
     operatorName,
     latestAction,
     latestTimestamp,
@@ -242,6 +321,8 @@ function buildMachineSnapshot(
     pauseStartedAt: latestAction === "WO_PAUSE" ? latestLog.log_time : null,
     pauseReason:
       latestAction === "WO_PAUSE" ? resolvePauseReason(latestLog) : null,
+    keyStartedAt: keyState.keyStartedAt,
+    keyLastAction: keyState.keyLastAction,
     logs,
     errorMessage: null,
   };
@@ -251,6 +332,22 @@ function buildMachineSnapshot(
       ...snapshot,
       status: "OFFLINE",
       statusMessage: "No recent machine event in the live window.",
+    };
+  }
+
+  if (latestAction === "WO_PAUSE") {
+    return {
+      ...snapshot,
+      status: "PAUSED",
+      statusMessage: "Work order is paused.",
+    };
+  }
+
+  if (snapshot.keyStartedAt) {
+    return {
+      ...snapshot,
+      status: "KEY",
+      statusMessage: "Manual key mode is active on this machine.",
     };
   }
 
@@ -275,14 +372,6 @@ function buildMachineSnapshot(
       ...snapshot,
       status: "CALIBRATION",
       statusMessage: "Calibration activity is in progress.",
-    };
-  }
-
-  if (latestAction === "WO_PAUSE") {
-    return {
-      ...snapshot,
-      status: "PAUSED",
-      statusMessage: "Work order is paused.",
     };
   }
 
@@ -328,6 +417,9 @@ function resolveCardVariant(snapshot: MachineSnapshot): MachineCardVariant {
   if (snapshot.status === "PAUSED") {
     return "pause";
   }
+  if (snapshot.status === "KEY") {
+    return "key";
+  }
   if (snapshot.status === "SETTING") {
     return "setting";
   }
@@ -346,6 +438,9 @@ function resolveCardVariant(snapshot: MachineSnapshot): MachineCardVariant {
 function resolveCardBadgeLabel(snapshot: MachineSnapshot): string {
   if (snapshot.status === "PAUSED") {
     return "Pause Alert";
+  }
+  if (snapshot.status === "KEY") {
+    return "Key Alert";
   }
   if (snapshot.status === "SETTING") {
     return "Setting";
@@ -366,6 +461,9 @@ function resolveStatusLabel(snapshot: MachineSnapshot): MachineCardRecord["statu
   if (snapshot.status === "PAUSED") {
     return "PAUSED";
   }
+  if (snapshot.status === "KEY") {
+    return "KEY ACTIVE";
+  }
   if (snapshot.status === "ERROR") {
     return "ERROR";
   }
@@ -381,6 +479,10 @@ function resolveSummaryStatusLabel(
 ): MachineCardRecord["statusLabel"] {
   if (snapshot.status === "PAUSED") {
     return "PAUSED";
+  }
+
+  if (snapshot.status === "KEY") {
+    return "KEY ACTIVE";
   }
 
   if (snapshot.status === "ERROR") {
@@ -400,6 +502,10 @@ function resolveSummaryStatusMessage(
 ): string {
   if (snapshot.status === "PAUSED") {
     return "";
+  }
+
+  if (snapshot.status === "KEY") {
+    return "Manual key mode is active on this machine.";
   }
 
   if (summary?.executionStatus === "COMPLETE") {
@@ -424,6 +530,10 @@ function formatFallbackStatus(snapshot: MachineSnapshot): string {
 
   if (snapshot.status === "PAUSED") {
     return "Paused";
+  }
+
+  if (snapshot.status === "KEY") {
+    return "Key Active";
   }
 
   return "Live";
@@ -513,6 +623,12 @@ function buildDefaultAccumulator(woId: string, row: ReportRow): MachineWoAccumul
     woId,
     woDisplayId: resolveDisplayWoId(row, woId),
     machineId: row.originalLog?.device_id ?? null,
+    partNumber:
+      normalizeText(row.originalLog?.part_no) ??
+      normalizeText(row.woHeaderData?.partNo) ??
+      normalizeText(row.startRowData?.partNo) ??
+      normalizeText(row.woSummaryData?.partNo) ??
+      null,
     operatorName,
     jobType: row.jobType,
     pclText: resolveRowPclText(row),
@@ -632,6 +748,15 @@ function buildWoSummaryByMachine(
       entry.woDisplayId = displayWoId;
     }
 
+    if (!entry.partNumber) {
+      entry.partNumber =
+        normalizeText(row.originalLog?.part_no) ??
+        normalizeText(row.woHeaderData?.partNo) ??
+        normalizeText(row.startRowData?.partNo) ??
+        normalizeText(row.woSummaryData?.partNo) ??
+        null;
+    }
+
     if (row.action === "WO_START") {
       entry.hasWoStart = true;
     }
@@ -660,6 +785,7 @@ function buildWoSummaryByMachine(
       woId: entry.woId,
       woDisplayId: entry.woDisplayId,
       machineId: entry.machineId,
+      partNumber: entry.partNumber,
       operatorName: entry.operatorName,
       jobType: entry.jobType,
       executionStatus: resolveExecutionStatus(entry),
@@ -701,6 +827,17 @@ function buildMachineCardRecord(
     : snapshot.currentWoDisplayId
       ? `WO-${snapshot.currentWoDisplayId}`
       : "No Active WO";
+  const partNumber = matchingSummary?.partNumber ?? snapshot.partNumber ?? null;
+  const currentJobTypeLabel =
+    matchingSummary?.jobType && matchingSummary.jobType !== "Unknown"
+      ? matchingSummary.jobType
+      : snapshot.jobTypeLabel !== "Unknown"
+        ? snapshot.jobTypeLabel
+        : "-";
+  const pauseInsight = resolvePauseInsight(
+    snapshot.logs,
+    snapshot.currentWoInternalId,
+  );
 
   let metrics: MachineMetric[];
   if (snapshot.status === "PAUSED") {
@@ -708,6 +845,28 @@ function buildMachineCardRecord(
       {
         label: "Pause Reason",
         value: snapshot.pauseReason ?? "No pause reason from API",
+      },
+    ];
+  } else if (snapshot.status === "KEY") {
+    metrics = [
+      {
+        label: "Key Started",
+        value: snapshot.keyStartedAt
+          ? new Intl.DateTimeFormat("en-IN", {
+              hour: "numeric",
+              minute: "2-digit",
+              second: "2-digit",
+              hour12: true,
+            }).format(new Date(snapshot.keyStartedAt))
+          : "-",
+      },
+      {
+        label: "Last Key Action",
+        value: snapshot.keyLastAction ?? "KEY_ON",
+      },
+      {
+        label: "Current Job Type",
+        value: currentJobTypeLabel,
       },
     ];
   } else if (matchingSummary) {
@@ -731,9 +890,23 @@ function buildMachineCardRecord(
     updatedLabel,
     operatorName,
     workOrderLabel,
+    partNumber,
+    pauseCount: pauseInsight.pauseCount,
+    pauseReason: pauseInsight.pauseReason,
     metrics,
     footerLabel: resolveSummaryStatusMessage(snapshot, matchingSummary),
-    pauseStartedAt: snapshot.pauseStartedAt,
+    alertKind:
+      snapshot.status === "PAUSED"
+        ? "pause"
+        : snapshot.status === "KEY"
+          ? "key"
+          : null,
+    alertStartedAt:
+      snapshot.status === "PAUSED"
+        ? snapshot.pauseStartedAt
+        : snapshot.status === "KEY"
+          ? snapshot.keyStartedAt
+          : null,
   };
 }
 
@@ -756,6 +929,10 @@ function toReportLogEntries(logs: DeviceLogEntry[]): ReportDeviceLogEntry[] {
 
     if (typeof log.wo_name === "string") {
       reportLog.wo_name = log.wo_name;
+    }
+
+    if (typeof log.part_no === "string") {
+      reportLog.part_no = log.part_no;
     }
 
     if (log.pcl !== null && log.pcl !== undefined) {

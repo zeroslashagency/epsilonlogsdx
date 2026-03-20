@@ -34,6 +34,24 @@ export function formatElapsedDurationFromTimestamp(
     .join(":");
 }
 
+export function formatTimeOfDayFromTimestamp(timestamp: string | null) {
+  if (!timestamp) {
+    return "-";
+  }
+
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
 export function formatDurationCompactFromSeconds(
   totalSeconds: number | null | undefined,
 ) {
