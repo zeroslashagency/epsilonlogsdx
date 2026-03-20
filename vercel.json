@@ -1,8 +1,13 @@
 {
+  "functions": {
+    "api/v2/[...path].js": {
+      "maxDuration": 15
+    }
+  },
   "rewrites": [
     {
       "source": "/api/v2/:path*",
-      "destination": "https://app.epsilonengg.in/api/v2/:path*"
+      "destination": "/api/v2/:path*"
     }
   ]
 }
