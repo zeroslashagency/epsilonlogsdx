@@ -21,10 +21,19 @@ export interface MachineMetric {
   value: string;
 }
 
+export interface MachineReportEntry {
+  machineId: number;
+  productionCount: number;
+  maintenanceCount: number;
+  settingCount: number;
+  calibrationCount: number;
+}
+
 export interface MachineCardRecord {
   machineId: number;
   variant: MachineCardVariant;
   badgeLabel: string;
+  contextBadgeLabel: string | null;
   statusLabel: MachineStatusLabel;
   updatedLabel: string;
   operatorName: string;

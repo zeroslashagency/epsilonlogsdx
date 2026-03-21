@@ -5,6 +5,7 @@ import {
 } from "./machineConfig";
 import type {
   MachineCardRecord,
+  MachineReportEntry,
   MachineCardVariant,
   MachineMetric,
 } from "./dashboard-types";
@@ -94,6 +95,14 @@ interface MachineWoSummary {
   totalDurationSec: number;
   latestTimestamp: number;
   executionStatus: WoExecutionStatus;
+}
+
+interface MachineReportAccumulator {
+  machineId: number;
+  productionCount: number;
+  maintenanceCount: number;
+  settingCount: number;
+  calibrationCount: number;
 }
 
 const ACTIVE_ACTIONS = new Set(["SPINDLE_ON", "WO_START", "WO_RESUME"]);
@@ -886,6 +895,10 @@ function buildMachineCardRecord(
     machineId: snapshot.machineId,
     variant: resolveCardVariant(snapshot),
     badgeLabel: resolveCardBadgeLabel(snapshot),
+    contextBadgeLabel:
+      snapshot.status === "PAUSED" && currentJobTypeLabel !== "-"
+        ? currentJobTypeLabel
+        : null,
     statusLabel: resolveSummaryStatusLabel(snapshot, matchingSummary),
     updatedLabel,
     operatorName,
@@ -908,6 +921,93 @@ function buildMachineCardRecord(
           ? snapshot.keyStartedAt
           : null,
   };
+}
+
+function createMachineReportAccumulator(machineId: number): MachineReportAccumulator {
+  return {
+    machineId,
+    productionCount: 0,
+    maintenanceCount: 0,
+    settingCount: 0,
+    calibrationCount: 0,
+  };
+}
+
+function buildMachineReportEntries(
+  logs: readonly DeviceLogEntry[],
+  machineIds: readonly number[],
+): MachineReportEntry[] {
+  const allowedMachineIds = new Set(machineIds);
+  const woSessions = new Map<
+    string,
+    {
+      machineId: number;
+      latestTimestamp: number;
+      jobTypeLabel: JobTypeLabel;
+    }
+  >();
+
+  for (const log of logs) {
+    if (!allowedMachineIds.has(log.device_id)) {
+      continue;
+    }
+
+    const woId =
+      typeof log.wo_id === "number" && log.wo_id > 0 ? String(log.wo_id) : null;
+    if (!woId) {
+      continue;
+    }
+
+    const jobTypeLabel = mapRawJobTypeToLabel(log.job_type);
+    if (
+      jobTypeLabel !== "Production" &&
+      jobTypeLabel !== "Maintenance" &&
+      jobTypeLabel !== "Setting" &&
+      jobTypeLabel !== "Calibration"
+    ) {
+      continue;
+    }
+
+    const timestamp = toTimestamp(log.log_time) ?? 0;
+    const sessionKey = `${log.device_id}:${woId}`;
+    const existing = woSessions.get(sessionKey);
+
+    if (!existing || timestamp >= existing.latestTimestamp) {
+      woSessions.set(sessionKey, {
+        machineId: log.device_id,
+        latestTimestamp: timestamp,
+        jobTypeLabel,
+      });
+    }
+  }
+
+  const countsByMachine = new Map<number, MachineReportAccumulator>();
+
+  for (const machineId of machineIds) {
+    countsByMachine.set(machineId, createMachineReportAccumulator(machineId));
+  }
+
+  for (const session of woSessions.values()) {
+    const machineEntry =
+      countsByMachine.get(session.machineId) ??
+      createMachineReportAccumulator(session.machineId);
+
+    if (session.jobTypeLabel === "Production") {
+      machineEntry.productionCount += 1;
+    } else if (session.jobTypeLabel === "Maintenance") {
+      machineEntry.maintenanceCount += 1;
+    } else if (session.jobTypeLabel === "Setting") {
+      machineEntry.settingCount += 1;
+    } else if (session.jobTypeLabel === "Calibration") {
+      machineEntry.calibrationCount += 1;
+    }
+
+    countsByMachine.set(session.machineId, machineEntry);
+  }
+
+  return [...countsByMachine.values()].sort((left, right) =>
+    compareDashboardMachineOrder(left.machineId, right.machineId, machineIds),
+  );
 }
 
 function toReportLogEntries(logs: DeviceLogEntry[]): ReportDeviceLogEntry[] {
@@ -964,7 +1064,11 @@ export async function fetchLiveMachineCards(options: {
   signal?: AbortSignal;
   machineIds?: readonly number[];
   now?: Date;
-}): Promise<{ machines: MachineCardRecord[]; errors: string[] }> {
+}): Promise<{
+  machines: MachineCardRecord[];
+  machineReport: MachineReportEntry[];
+  errors: string[];
+}> {
   const machineIds = options.machineIds ?? DEFAULT_DASHBOARD_MACHINE_IDS;
   const now = options.now ?? new Date();
   const nowMs = now.getTime();
@@ -1021,6 +1125,7 @@ export async function fetchLiveMachineCards(options: {
       ? buildReport(reportLogs, new Map(), reportConfig).rows
       : [];
   const summaryByMachine = buildWoSummaryByMachine(reportRows, machineIds);
+  const machineReport = buildMachineReportEntries(combinedLogs, machineIds);
 
   const machines = machineResults
     .map(({ snapshot }) =>
@@ -1038,5 +1143,5 @@ export async function fetchLiveMachineCards(options: {
       ),
     );
 
-  return { machines, errors };
+  return { machines, machineReport, errors };
 }

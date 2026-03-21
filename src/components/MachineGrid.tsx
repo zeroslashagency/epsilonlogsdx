@@ -11,11 +11,11 @@ export function MachineGrid({
   currentTimeMs,
 }: MachineGridProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+    <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-4">
       {machines.map((machine, index) => (
         <div
           key={machine.machineId}
-          className="machine-overview-shop-card-enter"
+          className="machine-overview-shop-card-enter h-full"
           style={{
             animationDelay: `${index * 45}ms`,
           }}

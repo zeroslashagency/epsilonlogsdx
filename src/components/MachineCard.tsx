@@ -65,6 +65,13 @@ const statusClassMap: Record<MachineCardRecord["statusLabel"], string> = {
   ERROR: "border-fuchsia-300/90 bg-fuchsia-50/95 text-fuchsia-700",
 };
 
+const contextBadgeClassMap: Record<string, string> = {
+  Production: "border-emerald-300/90 bg-emerald-50/95 text-emerald-700",
+  Setting: "border-violet-300/90 bg-violet-50/95 text-violet-700",
+  Calibration: "border-sky-300/90 bg-sky-50/95 text-sky-700",
+  Maintenance: "border-rose-300/90 bg-rose-50/95 text-rose-700",
+};
+
 interface MachineCardProps {
   machine: MachineCardRecord;
   currentTimeMs: number;
@@ -89,13 +96,17 @@ export function MachineCard({
   const alertTimerClassName = isKeyAlert
     ? "machine-overview-shop-key-timer text-rose-950"
     : "machine-overview-shop-pause-timer text-amber-950";
-  const hasPauseInsight = machine.pauseCount > 0 || Boolean(machine.pauseReason);
-  const reasonLabel = machine.pauseReason ?? "-";
+  const reasonLabel = machine.pauseReason ?? "No pause reason from API";
+  const pauseCountLabel = String(Math.max(0, machine.pauseCount));
+  const contextBadgeClassName = machine.contextBadgeLabel
+    ? contextBadgeClassMap[machine.contextBadgeLabel] ??
+      "border-slate-300/80 bg-slate-50/95 text-slate-600"
+    : null;
 
   return (
     <article
       className={cn(
-        "machine-overview-shop-card relative flex h-full w-full flex-col overflow-hidden rounded-[28px] border p-5 text-left",
+        "machine-overview-shop-card relative flex h-full min-h-[clamp(320px,34vh,430px)] w-full flex-col overflow-hidden rounded-[28px] border p-[clamp(16px,1.05vw,20px)] text-left",
         surfaceClassMap[machine.variant],
         isPaused && "machine-overview-shop-card--pause",
         isKeyAlert && "machine-overview-shop-card--key",
@@ -106,14 +117,26 @@ export function MachineCard({
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-slate-200/60 bg-white/85 text-slate-500 shadow-[0_12px_25px_-18px_rgba(15,23,42,0.6)]">
             <Icon className="h-5 w-5" />
           </span>
-          <span
-            className={cn(
-              "inline-flex min-h-10 items-center rounded-full border px-4 py-2 text-[15px] font-semibold",
-              badgeClassMap[machine.variant],
-            )}
-          >
-            {machine.badgeLabel}
-          </span>
+          <div className="flex flex-wrap items-start gap-3">
+            <span
+              className={cn(
+                "inline-flex min-h-10 items-center rounded-full border px-4 py-2 text-[15px] font-semibold",
+                badgeClassMap[machine.variant],
+              )}
+            >
+              {machine.badgeLabel}
+            </span>
+            {machine.contextBadgeLabel && contextBadgeClassName ? (
+              <span
+                className={cn(
+                  "inline-flex min-h-10 items-center rounded-full border px-4 py-2 text-[15px] font-semibold",
+                  contextBadgeClassName,
+                )}
+              >
+                {machine.contextBadgeLabel}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex flex-col items-end gap-2">
@@ -134,10 +157,10 @@ export function MachineCard({
       </div>
 
       <div className="space-y-2">
-        <p className="text-[22px] font-semibold tracking-[-0.04em] text-slate-900">
+        <p className="text-[clamp(1.45rem,1.18vw,1.7rem)] font-semibold tracking-[-0.04em] text-slate-900">
           {getMachineLabel(machine.machineId)}
         </p>
-        <p className="text-[17px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        <p className="text-[clamp(0.95rem,0.78vw,1.05rem)] font-semibold uppercase tracking-[0.18em] text-slate-500">
           {machine.operatorName}
         </p>
       </div>
@@ -147,7 +170,7 @@ export function MachineCard({
           <p className="text-[14px] font-semibold uppercase tracking-[0.22em] text-slate-400">
             Part No
           </p>
-          <p className="text-[30px] font-semibold tracking-[-0.05em] text-slate-800">
+          <p className="text-[clamp(1.9rem,1.95vw,2.25rem)] font-semibold tracking-[-0.05em] text-slate-800">
             {machine.partNumber}
           </p>
         </div>
@@ -156,7 +179,7 @@ export function MachineCard({
       <p
         className={cn(
           machine.partNumber ? "mt-5" : "mt-6",
-          "text-[26px] font-semibold tracking-[-0.05em] text-slate-700",
+          "text-[clamp(1.7rem,1.55vw,2rem)] font-semibold tracking-[-0.05em] text-slate-700",
         )}
       >
         {machine.workOrderLabel}
@@ -183,7 +206,7 @@ export function MachineCard({
               </p>
               <p
                 className={cn(
-                  "mt-2 text-[34px] font-semibold tracking-[-0.06em]",
+                  "mt-2 text-[clamp(2rem,2.3vw,2.4rem)] font-semibold tracking-[-0.06em]",
                   alertTimerClassName,
                 )}
               >
@@ -202,19 +225,31 @@ export function MachineCard({
             </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2.5 text-[15px]">
-            {machine.metrics.map((metric) => (
-              <div
-                key={`${machine.machineId}-${metric.label}`}
-                className="contents"
-              >
-                <span className="text-slate-500">{metric.label}</span>
-                <span className="text-right font-medium text-slate-700">
-                  {metric.value}
-                </span>
-              </div>
-            ))}
-          </div>
+          {isPaused ? (
+            <div className="mt-4 flex min-w-0 items-center gap-3 text-[15px]">
+              <span className="inline-flex min-w-11 items-center justify-center rounded-full border border-emerald-300/90 bg-emerald-50/95 px-3 py-1 text-sm font-semibold text-emerald-700 shadow-[0_10px_20px_-18px_rgba(16,185,129,0.8)]">
+                {pauseCountLabel}
+              </span>
+              <p className="min-w-0 text-slate-600">
+                <span className="font-medium text-slate-500">Pause Reason</span>{" "}
+                <span className="font-medium text-slate-700">{reasonLabel}</span>
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2.5 text-[15px]">
+              {machine.metrics.map((metric) => (
+                <div
+                  key={`${machine.machineId}-${metric.label}`}
+                  className="contents"
+                >
+                  <span className="text-slate-500">{metric.label}</span>
+                  <span className="text-right font-medium text-slate-700">
+                    {metric.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <div className="mt-7 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2.5 text-[15px]">
@@ -228,18 +263,6 @@ export function MachineCard({
           ))}
         </div>
       )}
-
-      {!isAlertCard && hasPauseInsight ? (
-        <div className="mt-5 h-10 flex items-center gap-3 text-[15px]">
-          <span className="inline-flex min-w-10 items-center justify-center rounded-full border border-emerald-300/90 bg-emerald-50/95 px-3 py-1 text-sm font-semibold text-emerald-700 shadow-[0_10px_20px_-18px_rgba(16,185,129,0.8)] transition-opacity">
-            {machine.pauseCount}
-          </span>
-          <p className="min-w-0 text-slate-600">
-            <span className="font-medium text-slate-500">Reason:</span>{" "}
-            <span className="font-medium text-slate-700">{reasonLabel}</span>
-          </p>
-        </div>
-      ) : null}
 
       {machine.footerLabel.trim().length > 0 ? (
         <div className="mt-auto border-t border-white/70 pt-4 text-[14px] text-slate-500">

@@ -79,3 +79,62 @@ export function formatDurationCompactFromSeconds(
 
   return parts.join(" ");
 }
+
+export function formatHoursMinutesFromSeconds(
+  totalSeconds: number | null | undefined,
+) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds == null || totalSeconds <= 0) {
+    return "00:00";
+  }
+
+  const roundedSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(roundedSeconds / 3600);
+  const minutes = Math.floor((roundedSeconds % 3600) / 60);
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+export function parseDurationLabelToSeconds(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === "-") {
+    return 0;
+  }
+
+  const matches = Array.from(
+    normalized.matchAll(/(\d+)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes|s|sec|secs|second|seconds)/g),
+  );
+
+  if (matches.length === 0) {
+    return 0;
+  }
+
+  let totalSeconds = 0;
+  for (const [, rawAmount, unit] of matches) {
+    if (!unit) {
+      continue;
+    }
+
+    const amount = Number(rawAmount);
+    if (!Number.isFinite(amount)) {
+      continue;
+    }
+
+    if (unit.startsWith("h")) {
+      totalSeconds += amount * 3600;
+      continue;
+    }
+
+    if (unit.startsWith("m")) {
+      totalSeconds += amount * 60;
+      continue;
+    }
+
+    totalSeconds += amount;
+  }
+
+  return totalSeconds;
+}

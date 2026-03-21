@@ -4,10 +4,14 @@ import {
   compareDashboardMachineOrder,
   DEFAULT_DASHBOARD_MACHINE_IDS,
 } from "./data/machineConfig";
-import type { MachineCardRecord } from "./data/dashboard-types";
+import type {
+  MachineCardRecord,
+  MachineReportEntry,
+} from "./data/dashboard-types";
 
 import { MachineGrid } from "./components/MachineGrid";
 import { MachineOverviewHeader } from "./components/MachineOverviewHeader";
+import { OperatorLeaderboard } from "./components/OperatorLeaderboard";
 import { fetchLiveMachineCards } from "./data/liveMachineData";
 import { formatRefreshTime } from "./lib/time";
 import "./machine-overview-shop.css";
@@ -21,15 +25,18 @@ interface CachedDashboardState {
   cachedAt: number;
   lastRefreshedAt: string;
   machines: MachineCardRecord[];
+  machineReport: MachineReportEntry[];
 }
 
 function readCachedDashboardState(): {
   machines: MachineCardRecord[];
+  machineReport: MachineReportEntry[];
   lastRefreshedAt: Date | null;
 } {
   if (typeof window === "undefined") {
     return {
       machines: [],
+      machineReport: [],
       lastRefreshedAt: null,
     };
   }
@@ -39,6 +46,7 @@ function readCachedDashboardState(): {
     if (!rawValue) {
       return {
         machines: [],
+        machineReport: [],
         lastRefreshedAt: null,
       };
     }
@@ -47,11 +55,13 @@ function readCachedDashboardState(): {
     if (
       !parsed ||
       !Array.isArray(parsed.machines) ||
+      !Array.isArray(parsed.machineReport) ||
       typeof parsed.cachedAt !== "number" ||
       typeof parsed.lastRefreshedAt !== "string"
     ) {
       return {
         machines: [],
+        machineReport: [],
         lastRefreshedAt: null,
       };
     }
@@ -59,6 +69,7 @@ function readCachedDashboardState(): {
     if (Date.now() - parsed.cachedAt > MACHINE_CACHE_TTL_MS) {
       return {
         machines: [],
+        machineReport: [],
         lastRefreshedAt: null,
       };
     }
@@ -66,6 +77,7 @@ function readCachedDashboardState(): {
     const lastRefreshedAt = new Date(parsed.lastRefreshedAt);
     return {
       machines: parsed.machines,
+      machineReport: parsed.machineReport,
       lastRefreshedAt: Number.isFinite(lastRefreshedAt.getTime())
         ? lastRefreshedAt
         : null,
@@ -73,6 +85,7 @@ function readCachedDashboardState(): {
   } catch {
     return {
       machines: [],
+      machineReport: [],
       lastRefreshedAt: null,
     };
   }
@@ -87,8 +100,14 @@ export default function MachineOverviewPage() {
   const [machines, setMachines] = useState<MachineCardRecord[]>(
     cachedDashboardState.machines,
   );
+  const [machineReport, setMachineReport] = useState<MachineReportEntry[]>(
+    cachedDashboardState.machineReport,
+  );
   const [isRefreshing, setIsRefreshing] = useState(
     cachedDashboardState.machines.length === 0,
+  );
+  const [isFullscreen, setIsFullscreen] = useState(() =>
+    typeof document !== "undefined" ? document.fullscreenElement !== null : false,
   );
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(
     cachedDashboardState.lastRefreshedAt,
@@ -110,6 +129,7 @@ export default function MachineOverviewPage() {
   const loadMachines = useCallback(async () => {
     if (!API_TOKEN) {
       setMachines([]);
+      setMachineReport([]);
       setIsRefreshing(false);
       setError(
         "Missing VITE_API_TOKEN. Add it to /Users/xoxo/Desktop/machine-overview-shop/.env.local to enable live machine data.",
@@ -133,6 +153,7 @@ export default function MachineOverviewPage() {
       }
 
       setMachines(result.machines);
+      setMachineReport(result.machineReport);
       setError(
         result.errors.length > 0
           ? `Partial data loaded. ${result.errors.join(" · ")}`
@@ -146,6 +167,7 @@ export default function MachineOverviewPage() {
           cachedAt: Date.now(),
           lastRefreshedAt: refreshedAt.toISOString(),
           machines: result.machines,
+          machineReport: result.machineReport,
         } satisfies CachedDashboardState),
       );
     } catch (nextError) {
@@ -200,8 +222,34 @@ export default function MachineOverviewPage() {
     };
   }, []);
 
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(document.fullscreenElement !== null);
+    }
+
+    handleFullscreenChange();
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
   function handleRefresh() {
     void loadMachines();
+  }
+
+  async function handleToggleFullscreen() {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+
+    await document.documentElement.requestFullscreen();
   }
 
   const isInitialLoad = sortedMachines.length === 0 && !error;
@@ -214,11 +262,13 @@ export default function MachineOverviewPage() {
   return (
     <div className="machine-overview-shop-page">
       <main className="machine-overview-shop-board min-h-screen">
-        <section className="mx-auto w-full max-w-[1680px] px-3 py-5 sm:px-4 sm:py-7 lg:px-6">
+        <section className="mx-auto w-full max-w-[2200px] px-3 py-5 sm:px-4 sm:py-6 lg:px-5 xl:px-6 2xl:px-8">
           <MachineOverviewHeader
             isRefreshing={isRefreshing}
+            isFullscreen={isFullscreen}
             lastRefreshLabel={lastRefreshLabel}
             onRefresh={handleRefresh}
+            onToggleFullscreen={handleToggleFullscreen}
           />
           {error ? (
             <div className="mb-4 rounded-[22px] border border-rose-200/90 bg-white/90 px-4 py-3 text-sm text-rose-700 shadow-[0_18px_40px_-30px_rgba(244,63,94,0.5)]">
@@ -230,10 +280,16 @@ export default function MachineOverviewPage() {
               Loading live machine data...
             </div>
           ) : (
-            <MachineGrid
-              machines={sortedMachines}
-              currentTimeMs={currentTimeMs}
-            />
+            <div className="grid gap-5 min-[1800px]:grid-cols-[minmax(0,1fr)_340px] min-[1800px]:items-start">
+              <MachineGrid
+                machines={sortedMachines}
+                currentTimeMs={currentTimeMs}
+              />
+              <OperatorLeaderboard
+                machines={sortedMachines}
+                machineReport={machineReport}
+              />
+            </div>
           )}
         </section>
       </main>
