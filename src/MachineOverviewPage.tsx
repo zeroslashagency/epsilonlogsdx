@@ -262,7 +262,7 @@ export default function MachineOverviewPage() {
   return (
     <div className="machine-overview-shop-page">
       <main className="machine-overview-shop-board min-h-screen">
-        <section className="mx-auto w-full max-w-[2200px] px-3 py-5 sm:px-4 sm:py-6 lg:px-5 xl:px-6 2xl:px-8">
+        <section className="mx-auto w-full max-w-[2240px] px-3 py-5 sm:px-4 sm:py-6 lg:px-4 xl:px-5 2xl:px-6">
           <MachineOverviewHeader
             isRefreshing={isRefreshing}
             isFullscreen={isFullscreen}
@@ -280,7 +280,7 @@ export default function MachineOverviewPage() {
               Loading live machine data...
             </div>
           ) : (
-            <div className="grid gap-5 min-[1800px]:grid-cols-[minmax(0,1fr)_340px] min-[1800px]:items-start">
+            <div className="grid gap-4 min-[1500px]:grid-cols-[minmax(0,1fr)_360px] min-[1500px]:items-start">
               <MachineGrid
                 machines={sortedMachines}
                 currentTimeMs={currentTimeMs}

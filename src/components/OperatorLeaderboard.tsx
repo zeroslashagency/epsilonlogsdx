@@ -124,11 +124,11 @@ function SectionTitle({
   return (
     <div className="mb-3">
       {eyebrow ? (
-        <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-slate-400">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
           {eyebrow}
         </p>
       ) : null}
-      <h2 className="mt-2 text-[22px] font-semibold tracking-[-0.045em] text-slate-800">
+      <h2 className="mt-1.5 text-[18px] font-semibold tracking-[-0.04em] text-slate-800">
         {title}
       </h2>
     </div>
@@ -150,44 +150,52 @@ function ProductionTable({
 
   return (
     <div className="overflow-hidden rounded-[24px] border border-slate-200/90 bg-white/90">
-      <div className="grid grid-cols-[minmax(0,1.8fr)_88px_96px_80px] gap-x-3 border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,244,235,0.95),rgba(255,239,229,0.9))] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-        <span>Operator Name</span>
-        <span>Man Hrs</span>
-        <span>Machine Hrs</span>
-        <span>Pause</span>
-      </div>
-
-      <div className="divide-y divide-slate-200/75">
-        {entries.map((entry) => (
-          <div
-            key={entry.operatorName}
-            className="grid grid-cols-[minmax(0,1.8fr)_88px_96px_80px] items-center gap-x-3 px-4 py-3 text-[15px] text-slate-700"
-          >
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="truncate font-semibold text-slate-800">
-                  {entry.operatorName}
-                </span>
-                {entry.machineCount > 1 ? (
-                  <span className="inline-flex min-w-11 items-center justify-center rounded-full border border-emerald-300/90 bg-emerald-50/95 px-3 py-1 text-xs font-semibold text-emerald-700 shadow-[0_10px_18px_-16px_rgba(16,185,129,0.78)]">
-                    X{entry.machineCount}
+      <table className="w-full table-fixed border-collapse">
+        <colgroup>
+          <col style={{ width: "45%" }} />
+          <col style={{ width: "18%" }} />
+          <col style={{ width: "22%" }} />
+          <col style={{ width: "15%" }} />
+        </colgroup>
+        <thead>
+          <tr className="border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,244,235,0.95),rgba(255,239,229,0.9))] text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <th className="px-3 py-2.5 text-left align-top">Operator Name</th>
+            <th className="px-2 py-2.5 text-center align-top">Man Hrs</th>
+            <th className="px-2 py-2.5 text-center align-top">Machine Hrs</th>
+            <th className="px-2 py-2.5 text-center align-top">Pause</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry) => (
+            <tr
+              key={entry.operatorName}
+              className="border-t border-slate-200/75 text-[13px] text-slate-700"
+            >
+              <td className="px-3 py-3 align-middle">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate font-semibold text-slate-800">
+                    {entry.operatorName}
                   </span>
-                ) : null}
-              </div>
-            </div>
-
-            <span className="font-medium text-slate-700">
-              {formatHoursMinutesFromSeconds(entry.manHoursSeconds)}
-            </span>
-            <span className="font-medium text-slate-700">
-              {formatHoursMinutesFromSeconds(entry.machineHoursSeconds)}
-            </span>
-            <span className="font-semibold text-slate-800">
-              {entry.pauseCount}
-            </span>
-          </div>
-        ))}
-      </div>
+                  {entry.machineCount > 1 ? (
+                    <span className="inline-flex min-w-9 items-center justify-center rounded-full border border-emerald-300/90 bg-emerald-50/95 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 shadow-[0_10px_18px_-16px_rgba(16,185,129,0.78)]">
+                      X{entry.machineCount}
+                    </span>
+                  ) : null}
+                </div>
+              </td>
+              <td className="px-2 py-3 text-center font-medium tabular-nums text-slate-700">
+                {formatHoursMinutesFromSeconds(entry.manHoursSeconds)}
+              </td>
+              <td className="px-2 py-3 text-center font-medium tabular-nums text-slate-700">
+                {formatHoursMinutesFromSeconds(entry.machineHoursSeconds)}
+              </td>
+              <td className="px-2 py-3 text-center font-semibold tabular-nums text-slate-800">
+                {entry.pauseCount}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -199,40 +207,51 @@ function QcTable({
 }) {
   return (
     <div className="overflow-hidden rounded-[24px] border border-slate-200/90 bg-white/90">
-      <div className="grid grid-cols-[minmax(0,1.8fr)_88px_96px_80px] gap-x-3 border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,244,235,0.95),rgba(255,239,229,0.9))] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-        <span>Name</span>
-        <span>Man Hrs</span>
-        <span>Machine Hrs</span>
-        <span>Pause</span>
-      </div>
-
-      {entries.length === 0 ? (
-        <div className="px-4 py-6 text-sm text-slate-500">
-          No QC operator data available.
-        </div>
-      ) : (
-        <div className="divide-y divide-slate-200/75">
-          {entries.map((entry) => (
-            <div
-              key={entry.name}
-              className="grid grid-cols-[minmax(0,1.8fr)_88px_96px_80px] items-center gap-x-3 px-4 py-3 text-[15px] text-slate-700"
-            >
-              <span className="truncate font-semibold text-slate-800">
-                {entry.name}
-              </span>
-              <span className="font-medium text-slate-700">
-                {entry.manHoursLabel}
-              </span>
-              <span className="font-medium text-slate-700">
-                {entry.machineHoursLabel}
-              </span>
-              <span className="font-semibold text-slate-800">
-                {entry.pauseCount}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      <table className="w-full table-fixed border-collapse">
+        <colgroup>
+          <col style={{ width: "45%" }} />
+          <col style={{ width: "18%" }} />
+          <col style={{ width: "22%" }} />
+          <col style={{ width: "15%" }} />
+        </colgroup>
+        <thead>
+          <tr className="border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,244,235,0.95),rgba(255,239,229,0.9))] text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <th className="px-3 py-2.5 text-left align-top">Name</th>
+            <th className="px-2 py-2.5 text-center align-top">Man Hrs</th>
+            <th className="px-2 py-2.5 text-center align-top">Machine Hrs</th>
+            <th className="px-2 py-2.5 text-center align-top">Pause</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="px-4 py-6 text-sm text-slate-500">
+                No QC operator data available.
+              </td>
+            </tr>
+          ) : (
+            entries.map((entry) => (
+              <tr
+                key={entry.name}
+                className="border-t border-slate-200/75 text-[13px] text-slate-700"
+              >
+                <td className="truncate px-3 py-3 font-semibold text-slate-800">
+                  {entry.name}
+                </td>
+                <td className="px-2 py-3 text-center font-medium tabular-nums text-slate-700">
+                  {entry.manHoursLabel}
+                </td>
+                <td className="px-2 py-3 text-center font-medium tabular-nums text-slate-700">
+                  {entry.machineHoursLabel}
+                </td>
+                <td className="px-2 py-3 text-center font-semibold tabular-nums text-slate-800">
+                  {entry.pauseCount}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -244,44 +263,56 @@ function MachineReportTable({
 }) {
   return (
     <div className="overflow-hidden rounded-[24px] border border-slate-200/90 bg-white/90">
-      <div className="grid grid-cols-[minmax(0,1.2fr)_64px_72px_64px_72px] gap-x-3 border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,244,235,0.95),rgba(255,239,229,0.9))] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-        <span>Machine</span>
-        <span>Prod</span>
-        <span>Maint</span>
-        <span>Set</span>
-        <span>Cal</span>
-      </div>
-
-      {entries.length === 0 ? (
-        <div className="px-4 py-6 text-sm text-slate-500">
-          No machine report data available.
-        </div>
-      ) : (
-        <div className="divide-y divide-slate-200/75">
-          {entries.map((entry) => (
-            <div
-              key={entry.machineId}
-              className="grid grid-cols-[minmax(0,1.2fr)_64px_72px_64px_72px] items-center gap-x-3 px-4 py-3 text-[15px] text-slate-700"
-            >
-              <span className="truncate font-semibold text-slate-800">
-                {getMachineLabel(entry.machineId)}
-              </span>
-              <span className="font-medium text-slate-700">
-                {entry.productionCount}
-              </span>
-              <span className="font-medium text-slate-700">
-                {entry.maintenanceCount}
-              </span>
-              <span className="font-medium text-slate-700">
-                {entry.settingCount}
-              </span>
-              <span className="font-medium text-slate-700">
-                {entry.calibrationCount}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      <table className="w-full table-fixed border-collapse">
+        <colgroup>
+          <col style={{ width: "42%" }} />
+          <col style={{ width: "14%" }} />
+          <col style={{ width: "16%" }} />
+          <col style={{ width: "14%" }} />
+          <col style={{ width: "14%" }} />
+        </colgroup>
+        <thead>
+          <tr className="border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,244,235,0.95),rgba(255,239,229,0.9))] text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <th className="px-3 py-2.5 text-left align-top">Machine</th>
+            <th className="px-2 py-2.5 text-center align-top">Prod</th>
+            <th className="px-2 py-2.5 text-center align-top">Maint</th>
+            <th className="px-2 py-2.5 text-center align-top">Set</th>
+            <th className="px-2 py-2.5 text-center align-top">Cal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="px-4 py-6 text-sm text-slate-500">
+                No machine report data available.
+              </td>
+            </tr>
+          ) : (
+            entries.map((entry) => (
+              <tr
+                key={entry.machineId}
+                className="border-t border-slate-200/75 text-[13px] text-slate-700"
+              >
+                <td className="truncate px-3 py-3 font-semibold text-slate-800">
+                  {getMachineLabel(entry.machineId)}
+                </td>
+                <td className="px-2 py-3 text-center font-medium tabular-nums text-slate-700">
+                  {entry.productionCount}
+                </td>
+                <td className="px-2 py-3 text-center font-medium tabular-nums text-slate-700">
+                  {entry.maintenanceCount}
+                </td>
+                <td className="px-2 py-3 text-center font-medium tabular-nums text-slate-700">
+                  {entry.settingCount}
+                </td>
+                <td className="px-2 py-3 text-center font-medium tabular-nums text-slate-700">
+                  {entry.calibrationCount}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -294,8 +325,8 @@ export function OperatorLeaderboard({
   const qcEntries = buildQcLeaderboardEntries();
 
   return (
-    <aside className="rounded-[28px] border border-white/80 bg-white/88 p-4 shadow-[0_22px_50px_-34px_rgba(15,23,42,0.42)] backdrop-blur xl:sticky xl:top-6">
-      <div className="space-y-6">
+    <aside className="rounded-[26px] border border-white/80 bg-white/88 p-3 shadow-[0_22px_50px_-34px_rgba(15,23,42,0.42)] backdrop-blur min-[1500px]:sticky min-[1500px]:top-5">
+      <div className="space-y-5">
         <section>
           <SectionTitle
             eyebrow="Right Side Leaderboard"

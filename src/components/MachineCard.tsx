@@ -106,21 +106,21 @@ export function MachineCard({
   return (
     <article
       className={cn(
-        "machine-overview-shop-card relative flex h-full min-h-[clamp(320px,34vh,430px)] w-full flex-col overflow-hidden rounded-[28px] border p-[clamp(16px,1.05vw,20px)] text-left",
+        "machine-overview-shop-card relative flex h-full min-h-[clamp(300px,31vh,400px)] w-full flex-col overflow-hidden rounded-[26px] border p-[clamp(14px,0.92vw,18px)] text-left",
         surfaceClassMap[machine.variant],
         isPaused && "machine-overview-shop-card--pause",
         isKeyAlert && "machine-overview-shop-card--key",
       )}
     >
-      <div className="mb-6 flex items-start justify-between gap-3">
+      <div className="mb-5 flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-slate-200/60 bg-white/85 text-slate-500 shadow-[0_12px_25px_-18px_rgba(15,23,42,0.6)]">
-            <Icon className="h-5 w-5" />
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] border border-slate-200/60 bg-white/85 text-slate-500 shadow-[0_12px_25px_-18px_rgba(15,23,42,0.6)]">
+            <Icon className="h-4.5 w-4.5" />
           </span>
           <div className="flex flex-wrap items-start gap-3">
             <span
               className={cn(
-                "inline-flex min-h-10 items-center rounded-full border px-4 py-2 text-[15px] font-semibold",
+                "inline-flex min-h-9 items-center rounded-full border px-3.5 py-1.5 text-[14px] font-semibold",
                 badgeClassMap[machine.variant],
               )}
             >
@@ -129,7 +129,7 @@ export function MachineCard({
             {machine.contextBadgeLabel && contextBadgeClassName ? (
               <span
                 className={cn(
-                  "inline-flex min-h-10 items-center rounded-full border px-4 py-2 text-[15px] font-semibold",
+                  "inline-flex min-h-9 items-center rounded-full border px-3.5 py-1.5 text-[14px] font-semibold",
                   contextBadgeClassName,
                 )}
               >
@@ -142,7 +142,7 @@ export function MachineCard({
         <div className="flex flex-col items-end gap-2">
           <span
             className={cn(
-              "inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold uppercase tracking-[0.04em]",
+              "inline-flex items-center rounded-full border px-3 py-1 text-[13px] font-semibold uppercase tracking-[0.04em]",
               statusClassMap[machine.statusLabel],
               machine.statusLabel === "LIVE" &&
                 "machine-overview-shop-status-live",
@@ -157,20 +157,20 @@ export function MachineCard({
       </div>
 
       <div className="space-y-2">
-        <p className="text-[clamp(1.45rem,1.18vw,1.7rem)] font-semibold tracking-[-0.04em] text-slate-900">
+        <p className="text-[clamp(1.25rem,1.02vw,1.55rem)] font-semibold tracking-[-0.04em] text-slate-900">
           {getMachineLabel(machine.machineId)}
         </p>
-        <p className="text-[clamp(0.95rem,0.78vw,1.05rem)] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        <p className="text-[clamp(0.88rem,0.68vw,0.98rem)] font-semibold uppercase tracking-[0.18em] text-slate-500">
           {machine.operatorName}
         </p>
       </div>
 
       {machine.partNumber ? (
-        <div className="mt-6 space-y-1.5">
-          <p className="text-[14px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+        <div className="mt-5 space-y-1">
+          <p className="text-[13px] font-semibold uppercase tracking-[0.22em] text-slate-400">
             Part No
           </p>
-          <p className="text-[clamp(1.9rem,1.95vw,2.25rem)] font-semibold tracking-[-0.05em] text-slate-800">
+          <p className="text-[clamp(1.45rem,1.45vw,1.9rem)] font-semibold tracking-[-0.05em] text-slate-800">
             {machine.partNumber}
           </p>
         </div>
@@ -178,8 +178,8 @@ export function MachineCard({
 
       <p
         className={cn(
-          machine.partNumber ? "mt-5" : "mt-6",
-          "text-[clamp(1.7rem,1.55vw,2rem)] font-semibold tracking-[-0.05em] text-slate-700",
+          machine.partNumber ? "mt-4" : "mt-5",
+          "text-[clamp(1.2rem,1.18vw,1.65rem)] font-semibold tracking-[-0.05em] text-slate-700",
         )}
       >
         {machine.workOrderLabel}
@@ -226,7 +226,7 @@ export function MachineCard({
           </div>
 
           {isPaused ? (
-            <div className="mt-4 flex min-w-0 items-center gap-3 text-[15px]">
+            <div className="mt-4 flex min-w-0 items-center gap-3 text-[14px]">
               <span className="inline-flex min-w-11 items-center justify-center rounded-full border border-emerald-300/90 bg-emerald-50/95 px-3 py-1 text-sm font-semibold text-emerald-700 shadow-[0_10px_20px_-18px_rgba(16,185,129,0.8)]">
                 {pauseCountLabel}
               </span>
@@ -236,7 +236,7 @@ export function MachineCard({
               </p>
             </div>
           ) : (
-            <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2.5 text-[15px]">
+            <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 text-[14px]">
               {machine.metrics.map((metric) => (
                 <div
                   key={`${machine.machineId}-${metric.label}`}
@@ -252,7 +252,7 @@ export function MachineCard({
           )}
         </div>
       ) : (
-        <div className="mt-7 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2.5 text-[15px]">
+        <div className="mt-6 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 text-[14px]">
           {machine.metrics.map((metric) => (
             <div key={`${machine.machineId}-${metric.label}`} className="contents">
               <span className="text-slate-500">{metric.label}</span>
@@ -265,7 +265,7 @@ export function MachineCard({
       )}
 
       {machine.footerLabel.trim().length > 0 ? (
-        <div className="mt-auto border-t border-white/70 pt-4 text-[14px] text-slate-500">
+        <div className="mt-auto border-t border-white/70 pt-3 text-[13px] text-slate-500">
           {machine.footerLabel}
         </div>
       ) : (
