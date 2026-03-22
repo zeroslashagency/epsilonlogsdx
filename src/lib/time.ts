@@ -6,6 +6,28 @@ export function formatRefreshTime(refreshDate: Date) {
   }).format(refreshDate);
 }
 
+export function formatTime24Hours(date: Date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+export function formatElapsedHoursAgo(startDate: Date, nowMs: number) {
+  const startMs = startDate.getTime();
+  if (!Number.isFinite(startMs)) {
+    return "--:--h ago";
+  }
+
+  const elapsedMs = Math.max(0, nowMs - startMs);
+  const totalMinutes = Math.floor(elapsedMs / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}h ago`;
+}
+
 export function formatRefreshRateLabel(refreshRateMs: number) {
   return `${Math.round(refreshRateMs / 1000)} sec`;
 }

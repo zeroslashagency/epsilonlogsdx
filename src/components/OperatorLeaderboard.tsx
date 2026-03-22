@@ -25,6 +25,8 @@ interface ProductionLeaderboardEntry {
 interface OperatorLeaderboardProps {
   machines: MachineCardRecord[];
   machineReport: MachineReportEntry[];
+  machineReportStartLabel: string;
+  machineReportAgeLabel: string;
 }
 
 function normalizeOperatorName(value: string) {
@@ -317,9 +319,36 @@ function MachineReportTable({
   );
 }
 
+function MachineReportHeader({
+  startLabel,
+  ageLabel,
+}: {
+  startLabel: string;
+  ageLabel: string;
+}) {
+  return (
+    <div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-2">
+      <h2 className="truncate text-[17px] font-semibold tracking-[-0.04em] text-slate-800">
+        Machine Report
+      </h2>
+      <span className="inline-flex items-center rounded-full border border-slate-200/90 bg-white/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+        24H
+      </span>
+      <span className="inline-flex items-center rounded-full border border-slate-200/90 bg-white/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+        Start {startLabel}
+      </span>
+      <span className="inline-flex items-center rounded-full border border-slate-200/90 bg-white/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+        {ageLabel}
+      </span>
+    </div>
+  );
+}
+
 export function OperatorLeaderboard({
   machines,
   machineReport,
+  machineReportStartLabel,
+  machineReportAgeLabel,
 }: OperatorLeaderboardProps) {
   const productionEntries = buildProductionLeaderboardEntries(machines);
   const qcEntries = buildQcLeaderboardEntries();
@@ -341,7 +370,10 @@ export function OperatorLeaderboard({
         </section>
 
         <section>
-          <SectionTitle title="Machine Report" />
+          <MachineReportHeader
+            startLabel={machineReportStartLabel}
+            ageLabel={machineReportAgeLabel}
+          />
           <MachineReportTable entries={machineReport} />
         </section>
       </div>

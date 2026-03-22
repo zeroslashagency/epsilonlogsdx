@@ -13,7 +13,11 @@ import { MachineGrid } from "./components/MachineGrid";
 import { MachineOverviewHeader } from "./components/MachineOverviewHeader";
 import { OperatorLeaderboard } from "./components/OperatorLeaderboard";
 import { fetchLiveMachineCards } from "./data/liveMachineData";
-import { formatRefreshTime } from "./lib/time";
+import {
+  formatElapsedHoursAgo,
+  formatRefreshTime,
+  formatTime24Hours,
+} from "./lib/time";
 import "./machine-overview-shop.css";
 
 const AUTO_REFRESH_RATE_MS = 30_000;
@@ -258,6 +262,14 @@ export default function MachineOverviewPage() {
       ? "Refreshing..."
       : `Last refresh: ${formatRefreshTime(lastRefreshedAt)}`
     : "Waiting for first refresh...";
+  const machineReportReferenceDate = lastRefreshedAt ?? new Date(currentTimeMs);
+  const machineReportStartDate = new Date(machineReportReferenceDate);
+  machineReportStartDate.setHours(0, 0, 0, 0);
+  const machineReportStartLabel = formatTime24Hours(machineReportReferenceDate);
+  const machineReportAgeLabel = formatElapsedHoursAgo(
+    machineReportStartDate,
+    currentTimeMs,
+  );
 
   return (
     <div className="machine-overview-shop-page">
@@ -288,6 +300,8 @@ export default function MachineOverviewPage() {
               <OperatorLeaderboard
                 machines={sortedMachines}
                 machineReport={machineReport}
+                machineReportStartLabel={machineReportStartLabel}
+                machineReportAgeLabel={machineReportAgeLabel}
               />
             </div>
           )}

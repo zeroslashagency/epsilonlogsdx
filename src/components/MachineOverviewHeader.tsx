@@ -16,14 +16,25 @@ export function MachineOverviewHeader({
   onToggleFullscreen,
 }: MachineOverviewHeaderProps) {
   return (
-    <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-[-0.045em] text-slate-800 sm:text-4xl">
-          SHOP FLOOR DASHBOARD
-        </h1>
+    <div className="mb-5 flex flex-col gap-4 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center">
+      <div className="hidden lg:block" />
+
+      <div className="lg:justify-self-center">
+        <div className="flex items-center gap-3 lg:justify-center">
+          <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] border border-white/80 bg-white/90 p-1 shadow-[0_16px_30px_-24px_rgba(15,23,42,0.45)]">
+            <img
+              src="/brand-logo.png"
+              alt="Shop floor logo"
+              className="h-full w-full object-contain"
+            />
+          </span>
+          <h1 className="text-3xl font-semibold tracking-[-0.045em] text-slate-800 sm:text-4xl lg:text-center">
+            SHOP FLOOR DASHBOARD
+          </h1>
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+      <div className="flex flex-wrap items-center gap-3 lg:justify-self-end">
         <span className="inline-flex min-h-11 items-center rounded-full border border-white/80 bg-white/80 px-4 py-2 text-sm font-medium text-slate-500 shadow-[0_12px_35px_-24px_rgba(15,23,42,0.55)] backdrop-blur">
           Auto refresh 30s
         </span>
