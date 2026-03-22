@@ -54,6 +54,21 @@
   animation: machine-overview-shop-card-enter 0.36s ease-out both;
 }
 
+@keyframes machine-overview-shop-slide-panel {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.machine-overview-shop-slide-panel {
+  animation: machine-overview-shop-slide-panel 0.32s ease-out both;
+}
+
 @keyframes machine-overview-shop-pause-card {
   0%,
   100% {
@@ -149,7 +164,9 @@
   .machine-overview-shop-card--key,
   .machine-overview-shop-pause-timer,
   .machine-overview-shop-key-timer,
-  .machine-overview-shop-status-live {
+  .machine-overview-shop-status-live,
+  .machine-overview-shop-slide-panel,
+  .machine-overview-shop-card-enter {
     animation: none;
   }
 }

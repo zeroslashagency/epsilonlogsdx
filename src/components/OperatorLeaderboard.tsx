@@ -27,6 +27,7 @@ interface OperatorLeaderboardProps {
   machineReport: MachineReportEntry[];
   machineReportStartLabel: string;
   machineReportAgeLabel: string;
+  variant?: "rail" | "slide";
 }
 
 function normalizeOperatorName(value: string) {
@@ -349,14 +350,28 @@ export function OperatorLeaderboard({
   machineReport,
   machineReportStartLabel,
   machineReportAgeLabel,
+  variant = "rail",
 }: OperatorLeaderboardProps) {
   const productionEntries = buildProductionLeaderboardEntries(machines);
   const qcEntries = buildQcLeaderboardEntries();
+  const isSlideVariant = variant === "slide";
 
   return (
-    <aside className="rounded-[26px] border border-white/80 bg-white/88 p-3 shadow-[0_22px_50px_-34px_rgba(15,23,42,0.42)] backdrop-blur min-[1500px]:sticky min-[1500px]:top-5">
-      <div className="space-y-5">
-        <section>
+    <aside
+      className={`rounded-[26px] border border-white/80 bg-white/88 p-3 shadow-[0_22px_50px_-34px_rgba(15,23,42,0.42)] backdrop-blur ${
+        isSlideVariant
+          ? "mx-auto w-full max-w-[1280px]"
+          : "min-[1500px]:sticky min-[1500px]:top-5"
+      }`}
+    >
+      <div
+        className={
+          isSlideVariant
+            ? "grid gap-5 xl:grid-cols-2"
+            : "space-y-5"
+        }
+      >
+        <section className={isSlideVariant ? "xl:min-h-[320px]" : undefined}>
           <SectionTitle
             eyebrow="Right Side Leaderboard"
             title="Production Operator"
@@ -364,12 +379,12 @@ export function OperatorLeaderboard({
           <ProductionTable entries={productionEntries} />
         </section>
 
-        <section>
+        <section className={isSlideVariant ? "xl:min-h-[320px]" : undefined}>
           <SectionTitle title="QC Operator Incharge" />
           <QcTable entries={qcEntries} />
         </section>
 
-        <section>
+        <section className={isSlideVariant ? "xl:col-span-2" : undefined}>
           <MachineReportHeader
             startLabel={machineReportStartLabel}
             ageLabel={machineReportAgeLabel}

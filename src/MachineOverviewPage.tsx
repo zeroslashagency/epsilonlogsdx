@@ -10,6 +10,7 @@ import type {
 } from "./data/dashboard-types";
 
 import { MachineGrid } from "./components/MachineGrid";
+import { MachineCard } from "./components/MachineCard";
 import { MachineOverviewHeader } from "./components/MachineOverviewHeader";
 import { OperatorLeaderboard } from "./components/OperatorLeaderboard";
 import { fetchLiveMachineCards } from "./data/liveMachineData";
@@ -21,9 +22,14 @@ import {
 import "./machine-overview-shop.css";
 
 const AUTO_REFRESH_RATE_MS = 30_000;
+const PAGE_TWO_SLIDES = ["2.1", "2.2", "2.3"] as const;
+const PAGE_TWO_SLIDESHOW_RATE_MS = 15_000;
 const API_TOKEN = import.meta.env.VITE_API_TOKEN as string | undefined;
 const MACHINE_CACHE_KEY = "machine-overview-shop.live-cache";
 const MACHINE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type DashboardPage = "page-1" | "page-2";
+type PageTwoSlide = (typeof PAGE_TWO_SLIDES)[number];
 
 interface CachedDashboardState {
   cachedAt: number;
@@ -99,8 +105,13 @@ export default function MachineOverviewPage() {
   const cachedDashboardState = useMemo(() => readCachedDashboardState(), []);
   const autoRefreshIntervalRef = useRef<number | null>(null);
   const liveClockIntervalRef = useRef<number | null>(null);
+  const pageTwoSlideshowIntervalRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
+  const [activePage, setActivePage] = useState<DashboardPage>("page-1");
+  const [activePageTwoSlide, setActivePageTwoSlide] = useState<PageTwoSlide>("2.1");
+  const [isPageTwoSlideshowPlaying, setIsPageTwoSlideshowPlaying] =
+    useState(false);
   const [machines, setMachines] = useState<MachineCardRecord[]>(
     cachedDashboardState.machines,
   );
@@ -128,6 +139,14 @@ export default function MachineOverviewPage() {
         ),
       ),
     [machines],
+  );
+  const pageTwoMachinesTop = useMemo(
+    () => sortedMachines.slice(0, 4),
+    [sortedMachines],
+  );
+  const pageTwoMachinesBottom = useMemo(
+    () => sortedMachines.slice(4, 8),
+    [sortedMachines],
   );
 
   const loadMachines = useCallback(async () => {
@@ -239,6 +258,32 @@ export default function MachineOverviewPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (pageTwoSlideshowIntervalRef.current !== null) {
+      window.clearInterval(pageTwoSlideshowIntervalRef.current);
+      pageTwoSlideshowIntervalRef.current = null;
+    }
+
+    if (activePage !== "page-2" || !isPageTwoSlideshowPlaying) {
+      return;
+    }
+
+    pageTwoSlideshowIntervalRef.current = window.setInterval(() => {
+      setActivePageTwoSlide((currentSlide) => {
+        const currentIndex = PAGE_TWO_SLIDES.indexOf(currentSlide);
+        const nextIndex = (currentIndex + 1) % PAGE_TWO_SLIDES.length;
+        return PAGE_TWO_SLIDES[nextIndex] ?? PAGE_TWO_SLIDES[0];
+      });
+    }, PAGE_TWO_SLIDESHOW_RATE_MS);
+
+    return () => {
+      if (pageTwoSlideshowIntervalRef.current !== null) {
+        window.clearInterval(pageTwoSlideshowIntervalRef.current);
+        pageTwoSlideshowIntervalRef.current = null;
+      }
+    };
+  }, [activePage, activePageTwoSlide, isPageTwoSlideshowPlaying]);
+
   function handleRefresh() {
     void loadMachines();
   }
@@ -256,6 +301,44 @@ export default function MachineOverviewPage() {
     await document.documentElement.requestFullscreen();
   }
 
+  function handleSelectPage(page: DashboardPage) {
+    setActivePage(page);
+
+    if (page === "page-1") {
+      setIsPageTwoSlideshowPlaying(false);
+      return;
+    }
+
+    setActivePageTwoSlide("2.1");
+  }
+
+  function handleSelectPageTwoSlide(slide: PageTwoSlide) {
+    setActivePage("page-2");
+    setActivePageTwoSlide(slide);
+  }
+
+  async function handleTogglePageTwoSlideshow() {
+    if (activePage !== "page-2") {
+      setActivePage("page-2");
+      setActivePageTwoSlide("2.1");
+    }
+
+    const nextPlaying = !isPageTwoSlideshowPlaying;
+    setIsPageTwoSlideshowPlaying(nextPlaying);
+
+    if (
+      nextPlaying &&
+      typeof document !== "undefined" &&
+      !document.fullscreenElement
+    ) {
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {
+        // Ignore fullscreen errors and continue the slideshow.
+      }
+    }
+  }
+
   const isInitialLoad = sortedMachines.length === 0 && !error;
   const lastRefreshLabel = lastRefreshedAt
     ? isRefreshing
@@ -271,15 +354,61 @@ export default function MachineOverviewPage() {
     currentTimeMs,
   );
 
+  const pageTwoSlidePosition = PAGE_TWO_SLIDES.indexOf(activePageTwoSlide) + 1;
+
+  function renderPageTwoMachineSlide(
+    slide: PageTwoSlide,
+    title: string,
+    subtitle: string,
+    slideMachines: MachineCardRecord[],
+  ) {
+    return (
+      <section
+        key={slide}
+        className="machine-overview-shop-slide-panel space-y-4"
+      >
+        <div className="flex flex-wrap items-end justify-between gap-3 rounded-[24px] border border-white/80 bg-white/82 px-4 py-3 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.34)] backdrop-blur">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-slate-400">
+              PAGE 2 · SLIDE {slide}
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-[-0.045em] text-slate-800">
+              {title}
+            </h2>
+          </div>
+          <p className="text-sm font-medium text-slate-500">{subtitle}</p>
+        </div>
+
+        <div className="grid auto-rows-fr gap-4 xl:grid-cols-2">
+          {slideMachines.map((machine, index) => (
+            <div
+              key={machine.machineId}
+              className="machine-overview-shop-card-enter h-full"
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              <MachineCard machine={machine} currentTimeMs={currentTimeMs} />
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <div className="machine-overview-shop-page">
       <main className="machine-overview-shop-board min-h-screen">
         <section className="mx-auto w-full max-w-[2240px] px-3 py-5 sm:px-4 sm:py-6 lg:px-4 xl:px-5 2xl:px-6">
           <MachineOverviewHeader
+            activePage={activePage}
+            activePageTwoSlide={activePageTwoSlide}
             isRefreshing={isRefreshing}
             isFullscreen={isFullscreen}
+            isPageTwoSlideshowPlaying={isPageTwoSlideshowPlaying}
             lastRefreshLabel={lastRefreshLabel}
+            onSelectPage={handleSelectPage}
+            onSelectPageTwoSlide={handleSelectPageTwoSlide}
             onRefresh={handleRefresh}
+            onTogglePageTwoSlideshow={handleTogglePageTwoSlideshow}
             onToggleFullscreen={handleToggleFullscreen}
           />
           {error ? (
@@ -292,18 +421,74 @@ export default function MachineOverviewPage() {
               Loading live machine data...
             </div>
           ) : (
-            <div className="grid gap-4 min-[1500px]:grid-cols-[minmax(0,1fr)_360px] min-[1500px]:items-start">
-              <MachineGrid
-                machines={sortedMachines}
-                currentTimeMs={currentTimeMs}
-              />
-              <OperatorLeaderboard
-                machines={sortedMachines}
-                machineReport={machineReport}
-                machineReportStartLabel={machineReportStartLabel}
-                machineReportAgeLabel={machineReportAgeLabel}
-              />
-            </div>
+            <>
+              {activePage === "page-1" ? (
+                <div className="grid gap-4 min-[1500px]:grid-cols-[minmax(0,1fr)_360px] min-[1500px]:items-start">
+                  <MachineGrid
+                    machines={sortedMachines}
+                    currentTimeMs={currentTimeMs}
+                  />
+                  <OperatorLeaderboard
+                    machines={sortedMachines}
+                    machineReport={machineReport}
+                    machineReportStartLabel={machineReportStartLabel}
+                    machineReportAgeLabel={machineReportAgeLabel}
+                  />
+                </div>
+              ) : (
+                <div key={activePageTwoSlide}>
+                  {activePageTwoSlide === "2.1"
+                    ? renderPageTwoMachineSlide(
+                        "2.1",
+                        "Machines 1 to 4",
+                        `Slide ${pageTwoSlidePosition} of ${PAGE_TWO_SLIDES.length} · ${isPageTwoSlideshowPlaying ? "Slideshow playing every 15s" : "Manual slide mode"}`,
+                        pageTwoMachinesTop,
+                      )
+                    : null}
+
+                  {activePageTwoSlide === "2.2"
+                    ? renderPageTwoMachineSlide(
+                        "2.2",
+                        "Machines 5 to CNC 1",
+                        `Slide ${pageTwoSlidePosition} of ${PAGE_TWO_SLIDES.length} · ${isPageTwoSlideshowPlaying ? "Slideshow playing every 15s" : "Manual slide mode"}`,
+                        pageTwoMachinesBottom,
+                      )
+                    : null}
+
+                  {activePageTwoSlide === "2.3" ? (
+                    <section
+                      key="2.3"
+                      className="machine-overview-shop-slide-panel space-y-4"
+                    >
+                      <div className="flex flex-wrap items-end justify-between gap-3 rounded-[24px] border border-white/80 bg-white/82 px-4 py-3 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.34)] backdrop-blur">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-slate-400">
+                            PAGE 2 · SLIDE 2.3
+                          </p>
+                          <h2 className="mt-1 text-2xl font-semibold tracking-[-0.045em] text-slate-800">
+                            Right Side Leaderboard
+                          </h2>
+                        </div>
+                        <p className="text-sm font-medium text-slate-500">
+                          Slide {pageTwoSlidePosition} of {PAGE_TWO_SLIDES.length} ·{" "}
+                          {isPageTwoSlideshowPlaying
+                            ? "Slideshow playing every 15s"
+                            : "Manual slide mode"}
+                        </p>
+                      </div>
+
+                      <OperatorLeaderboard
+                        machines={sortedMachines}
+                        machineReport={machineReport}
+                        machineReportStartLabel={machineReportStartLabel}
+                        machineReportAgeLabel={machineReportAgeLabel}
+                        variant="slide"
+                      />
+                    </section>
+                  ) : null}
+                </div>
+              )}
+            </>
           )}
         </section>
       </main>
