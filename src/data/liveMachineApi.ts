@@ -75,11 +75,107 @@ const API_BASE_URL = "/api/v2";
 const MAX_CURRENT_WO_PAGES = 12;
 const PAGE_BATCH_SIZE = 3;
 const DEFAULT_LATEST_PAGES_BACK = 2;
+const DEVICE_LOG_TOTAL_PAGES_STORAGE_KEY = "machine-overview-device-log-total-pages";
+
+const deviceLogTotalPagesMemoryCache = new Map<string, number>();
 
 export interface DeviceLogsConfig {
   deviceId: number;
   startDate: string;
   endDate: string;
+}
+
+export function resetDeviceLogTotalPagesCache() {
+  deviceLogTotalPagesMemoryCache.clear();
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(DEVICE_LOG_TOTAL_PAGES_STORAGE_KEY);
+  } catch {
+    return;
+  }
+}
+
+function getDeviceLogTotalPagesCacheKey(config: DeviceLogsConfig) {
+  return `${config.deviceId}:${config.startDate}`;
+}
+
+function readPersistedDeviceLogTotalPages(): Record<string, number> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(
+      DEVICE_LOG_TOTAL_PAGES_STORAGE_KEY,
+    );
+    if (!rawValue) {
+      return {};
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+    if (!parsedValue || typeof parsedValue !== "object") {
+      return {};
+    }
+
+    return Object.entries(parsedValue).reduce<Record<string, number>>(
+      (accumulator, [key, value]) => {
+        if (typeof value === "number" && Number.isFinite(value) && value >= 1) {
+          accumulator[key] = Math.max(1, Math.trunc(value));
+        }
+        return accumulator;
+      },
+      {},
+    );
+  } catch {
+    return {};
+  }
+}
+
+function readCachedDeviceLogTotalPages(config: DeviceLogsConfig): number | null {
+  const cacheKey = getDeviceLogTotalPagesCacheKey(config);
+  const memoryValue = deviceLogTotalPagesMemoryCache.get(cacheKey);
+  if (typeof memoryValue === "number" && Number.isFinite(memoryValue)) {
+    return memoryValue;
+  }
+
+  const persistedValue = readPersistedDeviceLogTotalPages()[cacheKey];
+  if (typeof persistedValue === "number" && Number.isFinite(persistedValue)) {
+    deviceLogTotalPagesMemoryCache.set(cacheKey, persistedValue);
+    return persistedValue;
+  }
+
+  return null;
+}
+
+function writeCachedDeviceLogTotalPages(
+  config: DeviceLogsConfig,
+  totalPages: number,
+) {
+  const normalizedTotalPages = Math.max(1, Math.trunc(totalPages));
+  const cacheKey = getDeviceLogTotalPagesCacheKey(config);
+  deviceLogTotalPagesMemoryCache.set(cacheKey, normalizedTotalPages);
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const nextPersistedValue = {
+    ...readPersistedDeviceLogTotalPages(),
+    [cacheKey]: normalizedTotalPages,
+  };
+
+  try {
+    window.localStorage.setItem(
+      DEVICE_LOG_TOTAL_PAGES_STORAGE_KEY,
+      JSON.stringify(nextPersistedValue),
+    );
+  } catch {
+    return;
+  }
 }
 
 function buildAuthHeaders(token: string) {
@@ -152,13 +248,112 @@ async function fetchDeviceLogPage(
   };
 }
 
+async function fetchLatestDeviceLogsFromCachedTotalPages(
+  config: DeviceLogsConfig,
+  token: string,
+  signal: AbortSignal | undefined,
+  cachedTotalPages: number,
+  pagesBack: number,
+): Promise<{ logs: DeviceLogEntry[]; totalPages: number }> {
+  const requestedStartPage = Math.max(2, cachedTotalPages - pagesBack + 1);
+  const requestedPageNumbers = Array.from(
+    { length: cachedTotalPages - requestedStartPage + 1 },
+    (_, index) => requestedStartPage + index,
+  );
+  const requestedPageResults = await Promise.all(
+    requestedPageNumbers.map(async (pageNumber) => ({
+      pageNumber,
+      result: await fetchDeviceLogPage(pageNumber, config, token, signal),
+    })),
+  );
+  const actualTotalPages = Math.max(
+    1,
+    ...requestedPageResults.map(({ result }) => result.totalPages),
+  );
+  writeCachedDeviceLogTotalPages(config, actualTotalPages);
+
+  if (actualTotalPages === cachedTotalPages) {
+    return {
+      logs: sortLogsDescending(
+        dedupeLogs(
+          requestedPageResults.flatMap(({ result }) => result.logs),
+        ),
+      ),
+      totalPages: actualTotalPages,
+    };
+  }
+
+  if (actualTotalPages <= 1) {
+    const newestPageResult = requestedPageResults.at(-1)?.result;
+    return {
+      logs: sortLogsDescending(dedupeLogs(newestPageResult?.logs ?? [])),
+      totalPages: actualTotalPages,
+    };
+  }
+
+  const actualStartPage = Math.max(2, actualTotalPages - pagesBack + 1);
+  const actualLatestPageNumbers = Array.from(
+    { length: actualTotalPages - actualStartPage + 1 },
+    (_, index) => actualStartPage + index,
+  );
+  const pageResultsByNumber = new Map(
+    requestedPageResults.map(({ pageNumber, result }) => [pageNumber, result]),
+  );
+  const missingPageNumbers = actualLatestPageNumbers.filter(
+    (pageNumber) => !pageResultsByNumber.has(pageNumber),
+  );
+
+  if (missingPageNumbers.length > 0) {
+    const missingPageResults = await Promise.all(
+      missingPageNumbers.map(async (pageNumber) => ({
+        pageNumber,
+        result: await fetchDeviceLogPage(pageNumber, config, token, signal),
+      })),
+    );
+    for (const { pageNumber, result } of missingPageResults) {
+      pageResultsByNumber.set(pageNumber, result);
+    }
+  }
+
+  return {
+    logs: sortLogsDescending(
+      dedupeLogs(
+        actualLatestPageNumbers.flatMap(
+          (pageNumber) => pageResultsByNumber.get(pageNumber)?.logs ?? [],
+        ),
+      ),
+    ),
+    totalPages: actualTotalPages,
+  };
+}
+
 export async function fetchLatestDeviceLogs(
   config: DeviceLogsConfig,
   token: string,
   signal?: AbortSignal,
   pagesBack = DEFAULT_LATEST_PAGES_BACK,
 ): Promise<{ logs: DeviceLogEntry[]; totalPages: number }> {
+  const cachedTotalPages = readCachedDeviceLogTotalPages(config);
+  if (
+    typeof cachedTotalPages === "number" &&
+    Number.isFinite(cachedTotalPages) &&
+    cachedTotalPages > 1
+  ) {
+    try {
+      return await fetchLatestDeviceLogsFromCachedTotalPages(
+        config,
+        token,
+        signal,
+        cachedTotalPages,
+        pagesBack,
+      );
+    } catch {
+      // Fall back to the legacy pagination discovery path when cached totals drift.
+    }
+  }
+
   const firstPage = await fetchDeviceLogPage(1, config, token, signal);
+  writeCachedDeviceLogTotalPages(config, firstPage.totalPages);
 
   if (firstPage.totalPages <= 1) {
     return {
