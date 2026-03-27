@@ -22,11 +22,15 @@ import {
 import "./machine-overview-shop.css";
 
 const AUTO_REFRESH_RATE_MS = 30_000;
+const MAX_FAILURE_BACKOFF_MS = 5 * 60 * 1000;
 const PAGE_TWO_SLIDES = ["2.1", "2.2", "2.3"] as const;
 const PAGE_TWO_SLIDESHOW_RATE_MS = 15_000;
 const API_TOKEN = import.meta.env.VITE_API_TOKEN as string | undefined;
 const MACHINE_CACHE_KEY = "machine-overview-shop.live-cache";
 const MACHINE_CACHE_TTL_MS = 5 * 60 * 1000;
+const PERSISTED_MACHINE_CACHE_MAX_AGE_MS = 60 * 60 * 1000;
+const OFFLINE_PAUSED_MESSAGE =
+  "Offline. Auto refresh is paused until the connection returns.";
 
 type DashboardPage = "page-1" | "page-2";
 type PageTwoSlide = (typeof PAGE_TWO_SLIDES)[number];
@@ -38,27 +42,32 @@ interface CachedDashboardState {
   machineReport: MachineReportEntry[];
 }
 
-function readCachedDashboardState(): {
+function emptyCachedDashboardState(): {
+  cachedAt: number | null;
   machines: MachineCardRecord[];
   machineReport: MachineReportEntry[];
   lastRefreshedAt: Date | null;
 } {
-  if (typeof window === "undefined") {
-    return {
-      machines: [],
-      machineReport: [],
-      lastRefreshedAt: null,
-    };
-  }
+  return {
+    cachedAt: null,
+    machines: [],
+    machineReport: [],
+    lastRefreshedAt: null,
+  };
+}
 
+function readCachedDashboardStateFromStorage(
+  storage: Storage,
+): {
+  cachedAt: number | null;
+  machines: MachineCardRecord[];
+  machineReport: MachineReportEntry[];
+  lastRefreshedAt: Date | null;
+} {
   try {
-    const rawValue = window.sessionStorage.getItem(MACHINE_CACHE_KEY);
+    const rawValue = storage.getItem(MACHINE_CACHE_KEY);
     if (!rawValue) {
-      return {
-        machines: [],
-        machineReport: [],
-        lastRefreshedAt: null,
-      };
+      return emptyCachedDashboardState();
     }
 
     const parsed = JSON.parse(rawValue) as CachedDashboardState;
@@ -69,23 +78,16 @@ function readCachedDashboardState(): {
       typeof parsed.cachedAt !== "number" ||
       typeof parsed.lastRefreshedAt !== "string"
     ) {
-      return {
-        machines: [],
-        machineReport: [],
-        lastRefreshedAt: null,
-      };
+      return emptyCachedDashboardState();
     }
 
-    if (Date.now() - parsed.cachedAt > MACHINE_CACHE_TTL_MS) {
-      return {
-        machines: [],
-        machineReport: [],
-        lastRefreshedAt: null,
-      };
+    if (Date.now() - parsed.cachedAt > PERSISTED_MACHINE_CACHE_MAX_AGE_MS) {
+      return emptyCachedDashboardState();
     }
 
     const lastRefreshedAt = new Date(parsed.lastRefreshedAt);
     return {
+      cachedAt: parsed.cachedAt,
       machines: parsed.machines,
       machineReport: parsed.machineReport,
       lastRefreshedAt: Number.isFinite(lastRefreshedAt.getTime())
@@ -93,20 +95,80 @@ function readCachedDashboardState(): {
         : null,
     };
   } catch {
-    return {
-      machines: [],
-      machineReport: [],
-      lastRefreshedAt: null,
-    };
+    return emptyCachedDashboardState();
+  }
+}
+
+function readCachedDashboardState(): {
+  cachedAt: number | null;
+  machines: MachineCardRecord[];
+  machineReport: MachineReportEntry[];
+  lastRefreshedAt: Date | null;
+} {
+  if (typeof window === "undefined") {
+    return emptyCachedDashboardState();
+  }
+
+  const cachedStates = [
+    readCachedDashboardStateFromStorage(window.sessionStorage),
+    readCachedDashboardStateFromStorage(window.localStorage),
+  ].filter((cachedState) => cachedState.cachedAt !== null);
+
+  if (cachedStates.length === 0) {
+    return emptyCachedDashboardState();
+  }
+
+  cachedStates.sort(
+    (left, right) => (right.cachedAt ?? 0) - (left.cachedAt ?? 0),
+  );
+  return cachedStates[0] ?? emptyCachedDashboardState();
+}
+
+function writeCachedDashboardState(nextState: CachedDashboardState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const serializedState = JSON.stringify(nextState);
+
+  try {
+    window.sessionStorage.setItem(MACHINE_CACHE_KEY, serializedState);
+  } catch {
+    // Ignore storage quota and privacy-mode errors.
+  }
+
+  try {
+    window.localStorage.setItem(MACHINE_CACHE_KEY, serializedState);
+  } catch {
+    // Ignore storage quota and privacy-mode errors.
   }
 }
 
 export default function MachineOverviewPage() {
   const cachedDashboardState = useMemo(() => readCachedDashboardState(), []);
-  const autoRefreshIntervalRef = useRef<number | null>(null);
+  const cachedRefreshAgeMs = useMemo(() => {
+    if (cachedDashboardState.cachedAt === null) {
+      return null;
+    }
+
+    return Math.max(0, Date.now() - cachedDashboardState.cachedAt);
+  }, [cachedDashboardState.cachedAt]);
+  const autoRefreshTimeoutRef = useRef<number | null>(null);
   const liveClockIntervalRef = useRef<number | null>(null);
   const pageTwoSlideshowIntervalRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const consecutiveFailureCountRef = useRef(0);
+  const hasVisibleDashboardDataRef = useRef(
+    cachedDashboardState.machines.length > 0,
+  );
+  const isDocumentHiddenRef = useRef(
+    typeof document !== "undefined" ? document.hidden : false,
+  );
+  const isBrowserOnlineRef = useRef(
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
+  const isRefreshingRef = useRef(false);
+  const scheduleNextRefreshRef = useRef<(delayMs?: number) => void>(() => {});
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [activePage, setActivePage] = useState<DashboardPage>("page-1");
   const [activePageTwoSlide, setActivePageTwoSlide] = useState<PageTwoSlide>("2.1");
@@ -149,67 +211,182 @@ export default function MachineOverviewPage() {
     [sortedMachines],
   );
 
-  const loadMachines = useCallback(async () => {
-    if (!API_TOKEN) {
-      setMachines([]);
-      setMachineReport([]);
-      setIsRefreshing(false);
-      setError(
-        "Missing VITE_API_TOKEN. Add it to /Users/xoxo/Desktop/machine-overview-shop/.env.local to enable live machine data.",
-      );
-      return;
+  const clearAutoRefreshTimeout = useCallback(() => {
+    if (autoRefreshTimeoutRef.current !== null) {
+      window.clearTimeout(autoRefreshTimeoutRef.current);
+      autoRefreshTimeoutRef.current = null;
     }
+  }, []);
 
+  const pauseAutoRefreshForOffline = useCallback(() => {
+    isBrowserOnlineRef.current = false;
+    consecutiveFailureCountRef.current = 0;
+    clearAutoRefreshTimeout();
     abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    setIsRefreshing(true);
+    abortControllerRef.current = null;
+    isRefreshingRef.current = false;
+    setIsRefreshing(false);
+    setError(OFFLINE_PAUSED_MESSAGE);
+  }, [clearAutoRefreshTimeout]);
 
-    try {
-      const result = await fetchLiveMachineCards({
-        token: API_TOKEN,
-        signal: controller.signal,
-      });
+  const getFailureBackoffDelayMs = useCallback((failureCount: number) => {
+    return Math.min(
+      AUTO_REFRESH_RATE_MS * 2 ** failureCount,
+      MAX_FAILURE_BACKOFF_MS,
+    );
+  }, []);
 
-      if (controller.signal.aborted) {
+  const loadMachines = useCallback(
+    async (reason: "auto" | "initial" | "manual" | "online" | "visibility") => {
+      if (isRefreshingRef.current) {
         return;
       }
 
-      setMachines(result.machines);
-      setMachineReport(result.machineReport);
-      setError(
-        result.errors.length > 0
-          ? `Partial data loaded. ${result.errors.join(" · ")}`
-          : null,
-      );
-      const refreshedAt = new Date();
-      setLastRefreshedAt(refreshedAt);
-      window.sessionStorage.setItem(
-        MACHINE_CACHE_KEY,
-        JSON.stringify({
+      if (!API_TOKEN) {
+        clearAutoRefreshTimeout();
+        setMachines([]);
+        setMachineReport([]);
+        hasVisibleDashboardDataRef.current = false;
+        isRefreshingRef.current = false;
+        setIsRefreshing(false);
+        setError(
+          "Missing VITE_API_TOKEN. Add it to /Users/xoxo/Desktop/machine-overview-shop/.env.local to enable live machine data.",
+        );
+        return;
+      }
+
+      if (reason !== "manual" && isDocumentHiddenRef.current) {
+        return;
+      }
+
+      if (!isBrowserOnlineRef.current) {
+        clearAutoRefreshTimeout();
+        setIsRefreshing(false);
+        setError(OFFLINE_PAUSED_MESSAGE);
+        return;
+      }
+
+      clearAutoRefreshTimeout();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      isRefreshingRef.current = true;
+      setIsRefreshing(true);
+      const shouldStreamInitialProgress =
+        reason === "initial" && !hasVisibleDashboardDataRef.current;
+      let nextRefreshDelayMs: number | null = null;
+
+      try {
+        const result = await fetchLiveMachineCards({
+          token: API_TOKEN,
+          signal: controller.signal,
+          ...(shouldStreamInitialProgress
+            ? {
+                onProgress: (partialResult: {
+                  machines: MachineCardRecord[];
+                  machineReport: MachineReportEntry[];
+                  errors: string[];
+                }) => {
+                  if (
+                    controller.signal.aborted ||
+                    partialResult.machines.length === 0
+                  ) {
+                    return;
+                  }
+
+                  hasVisibleDashboardDataRef.current = true;
+                  setMachines(partialResult.machines);
+                  setMachineReport(partialResult.machineReport);
+                  setError(
+                    partialResult.errors.length > 0
+                      ? `Partial data loaded. ${partialResult.errors.join(" · ")}`
+                      : null,
+                  );
+                },
+              }
+            : {}),
+        });
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        hasVisibleDashboardDataRef.current = result.machines.length > 0;
+        setMachines(result.machines);
+        setMachineReport(result.machineReport);
+        consecutiveFailureCountRef.current = 0;
+        setError(
+          result.errors.length > 0
+            ? `Partial data loaded. ${result.errors.join(" · ")}`
+            : null,
+        );
+        const refreshedAt = new Date();
+        setLastRefreshedAt(refreshedAt);
+        writeCachedDashboardState({
           cachedAt: Date.now(),
           lastRefreshedAt: refreshedAt.toISOString(),
           machines: result.machines,
           machineReport: result.machineReport,
-        } satisfies CachedDashboardState),
-      );
-    } catch (nextError) {
-      if (controller.signal.aborted) {
-        return;
-      }
+        });
+        nextRefreshDelayMs = AUTO_REFRESH_RATE_MS;
+      } catch (nextError) {
+        if (controller.signal.aborted) {
+          return;
+        }
 
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : "Failed to refresh live machine data.",
-      );
-    } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
+        const browserIsOnline =
+          typeof navigator === "undefined" ? true : navigator.onLine;
+        if (!browserIsOnline) {
+          isBrowserOnlineRef.current = false;
+          consecutiveFailureCountRef.current = 0;
+          setError(OFFLINE_PAUSED_MESSAGE);
+          return;
+        }
+
+        consecutiveFailureCountRef.current += 1;
+        nextRefreshDelayMs = getFailureBackoffDelayMs(
+          consecutiveFailureCountRef.current,
+        );
+        setError(
+          nextError instanceof Error
+            ? nextError.message
+            : "Failed to refresh live machine data.",
+        );
+      } finally {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
+        isRefreshingRef.current = false;
+        setIsRefreshing(false);
+
+        if (
+          !controller.signal.aborted &&
+          nextRefreshDelayMs !== null &&
+          isBrowserOnlineRef.current
+        ) {
+          scheduleNextRefreshRef.current(nextRefreshDelayMs);
+        }
       }
-      setIsRefreshing(false);
+    },
+    [clearAutoRefreshTimeout, getFailureBackoffDelayMs],
+  );
+
+  const scheduleNextRefresh = useCallback((delayMs = AUTO_REFRESH_RATE_MS) => {
+    clearAutoRefreshTimeout();
+
+    if (
+      typeof window === "undefined" ||
+      isDocumentHiddenRef.current ||
+      !API_TOKEN ||
+      !isBrowserOnlineRef.current
+    ) {
+      return;
     }
-  }, []);
+
+    autoRefreshTimeoutRef.current = window.setTimeout(() => {
+      void loadMachines("auto");
+    }, Math.max(0, delayMs));
+  }, [clearAutoRefreshTimeout, loadMachines]);
+  scheduleNextRefreshRef.current = scheduleNextRefresh;
 
   useEffect(() => {
     liveClockIntervalRef.current = window.setInterval(() => {
@@ -224,26 +401,90 @@ export default function MachineOverviewPage() {
   }, []);
 
   useEffect(() => {
-    void loadMachines();
-  }, [loadMachines]);
+    if (!API_TOKEN) {
+      void loadMachines("initial");
+      return;
+    }
+
+    if (
+      cachedRefreshAgeMs !== null &&
+      cachedRefreshAgeMs < AUTO_REFRESH_RATE_MS &&
+      cachedDashboardState.machines.length > 0
+    ) {
+      scheduleNextRefresh(AUTO_REFRESH_RATE_MS - cachedRefreshAgeMs);
+      return;
+    }
+
+    void loadMachines("initial");
+  }, [
+    cachedDashboardState.machines.length,
+    cachedRefreshAgeMs,
+    loadMachines,
+    scheduleNextRefresh,
+  ]);
 
   useEffect(() => {
-    autoRefreshIntervalRef.current = window.setInterval(() => {
-      void loadMachines();
-    }, AUTO_REFRESH_RATE_MS);
+    if (typeof document === "undefined") {
+      return;
+    }
 
-    return () => {
-      if (autoRefreshIntervalRef.current !== null) {
-        window.clearInterval(autoRefreshIntervalRef.current);
+    function handleVisibilityChange() {
+      isDocumentHiddenRef.current = document.hidden;
+
+      if (document.hidden) {
+        clearAutoRefreshTimeout();
+        return;
       }
+
+      if (isRefreshingRef.current) {
+        return;
+      }
+
+      void loadMachines("visibility");
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadMachines]);
+  }, [clearAutoRefreshTimeout, loadMachines]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    function handleOffline() {
+      pauseAutoRefreshForOffline();
+    }
+
+    function handleOnline() {
+      isBrowserOnlineRef.current = true;
+      consecutiveFailureCountRef.current = 0;
+
+      if (isDocumentHiddenRef.current || isRefreshingRef.current) {
+        return;
+      }
+
+      void loadMachines("online");
+    }
+
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [loadMachines, pauseAutoRefreshForOffline]);
 
   useEffect(() => {
     return () => {
+      clearAutoRefreshTimeout();
       abortControllerRef.current?.abort();
     };
-  }, []);
+  }, [clearAutoRefreshTimeout]);
 
   useEffect(() => {
     function handleFullscreenChange() {
@@ -285,7 +526,7 @@ export default function MachineOverviewPage() {
   }, [activePage, activePageTwoSlide, isPageTwoSlideshowPlaying]);
 
   function handleRefresh() {
-    void loadMachines();
+    void loadMachines("manual");
   }
 
   async function handleToggleFullscreen() {
@@ -344,11 +585,13 @@ export default function MachineOverviewPage() {
     ? isRefreshing
       ? "Refreshing..."
       : `Last refresh: ${formatRefreshTime(lastRefreshedAt)}`
-    : "Waiting for first refresh...";
+    : isRefreshing
+      ? "Refreshing..."
+      : "Waiting for first refresh...";
   const machineReportReferenceDate = lastRefreshedAt ?? new Date(currentTimeMs);
   const machineReportStartDate = new Date(machineReportReferenceDate);
   machineReportStartDate.setHours(0, 0, 0, 0);
-  const machineReportStartLabel = formatTime24Hours(machineReportReferenceDate);
+  const machineReportStartLabel = formatTime24Hours(machineReportStartDate);
   const machineReportAgeLabel = formatElapsedHoursAgo(
     machineReportStartDate,
     currentTimeMs,

@@ -67,6 +67,12 @@ interface MachineFetchResult {
   latestLogs: DeviceLogEntry[];
 }
 
+export interface LiveMachineCardsResult {
+  machines: MachineCardRecord[];
+  machineReport: MachineReportEntry[];
+  errors: string[];
+}
+
 interface MachineWoAccumulator {
   woId: string;
   woDisplayId: string;
@@ -1059,50 +1065,47 @@ function toReportLogEntries(logs: DeviceLogEntry[]): ReportDeviceLogEntry[] {
   });
 }
 
-export async function fetchLiveMachineCards(options: {
-  token: string;
-  signal?: AbortSignal;
-  machineIds?: readonly number[];
-  now?: Date;
-}): Promise<{
-  machines: MachineCardRecord[];
-  machineReport: MachineReportEntry[];
-  errors: string[];
-}> {
-  const machineIds = options.machineIds ?? DEFAULT_DASHBOARD_MACHINE_IDS;
-  const now = options.now ?? new Date();
-  const nowMs = now.getTime();
+async function fetchMachineResult(
+  machineId: number,
+  token: string,
+  signal: AbortSignal | undefined,
+  startOfDay: Date,
+  now: Date,
+  nowMs: number,
+): Promise<MachineFetchResult> {
+  try {
+    const config = {
+      deviceId: machineId,
+      startDate: formatDateForApi(startOfDay),
+      endDate: formatDateForApi(now),
+    };
+    const latestLogs = (
+      await fetchLatestDeviceLogs(
+        config,
+        token,
+        signal,
+      )
+    ).logs;
+    const snapshot = buildMachineSnapshot(machineId, latestLogs, nowMs);
+
+    return { snapshot, latestLogs };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Machine request failed.";
+    return {
+      snapshot: buildMachineErrorSnapshot(machineId, message),
+      latestLogs: [],
+    };
+  }
+}
+
+function buildLiveMachineCardsResult(
+  machineResults: readonly MachineFetchResult[],
+  machineIds: readonly number[],
+  now: Date,
+): LiveMachineCardsResult {
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
-
-  const machineResults = await Promise.all(
-    machineIds.map(async (machineId): Promise<MachineFetchResult> => {
-      try {
-        const config = {
-          deviceId: machineId,
-          startDate: formatDateForApi(startOfDay),
-          endDate: formatDateForApi(now),
-        };
-        const latestLogs = (
-          await fetchLatestDeviceLogs(
-            config,
-            options.token,
-            options.signal,
-          )
-        ).logs;
-        const snapshot = buildMachineSnapshot(machineId, latestLogs, nowMs);
-
-        return { snapshot, latestLogs };
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Machine request failed.";
-        return {
-          snapshot: buildMachineErrorSnapshot(machineId, message),
-          latestLogs: [],
-        };
-      }
-    }),
-  );
 
   const errors = machineResults.flatMap(({ snapshot }) => {
     if (snapshot.status !== "ERROR" || !snapshot.errorMessage) {
@@ -1132,7 +1135,7 @@ export async function fetchLiveMachineCards(options: {
       buildMachineCardRecord(
         snapshot,
         summaryByMachine.get(snapshot.machineId) ?? null,
-        nowMs,
+        now.getTime(),
       ),
     )
     .sort((left, right) =>
@@ -1144,4 +1147,48 @@ export async function fetchLiveMachineCards(options: {
     );
 
   return { machines, machineReport, errors };
+}
+
+export async function fetchLiveMachineCards(options: {
+  token: string;
+  signal?: AbortSignal;
+  machineIds?: readonly number[];
+  now?: Date;
+  onProgress?: (result: LiveMachineCardsResult) => void;
+}): Promise<LiveMachineCardsResult> {
+  const machineIds = options.machineIds ?? DEFAULT_DASHBOARD_MACHINE_IDS;
+  const now = options.now ?? new Date();
+  const nowMs = now.getTime();
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  const machineResultsById = new Map<number, MachineFetchResult>();
+
+  const machineResults = await Promise.all(
+    machineIds.map(async (machineId): Promise<MachineFetchResult> => {
+      const result = await fetchMachineResult(
+        machineId,
+        options.token,
+        options.signal,
+        startOfDay,
+        now,
+        nowMs,
+      );
+
+      machineResultsById.set(machineId, result);
+
+      if (options.onProgress && !options.signal?.aborted) {
+        const partialResults = machineIds.flatMap((orderedMachineId) => {
+          const partialResult = machineResultsById.get(orderedMachineId);
+          return partialResult ? [partialResult] : [];
+        });
+        options.onProgress(
+          buildLiveMachineCardsResult(partialResults, machineIds, now),
+        );
+      }
+
+      return result;
+    }),
+  );
+
+  return buildLiveMachineCardsResult(machineResults, machineIds, now);
 }

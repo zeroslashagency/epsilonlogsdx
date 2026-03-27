@@ -90,11 +90,9 @@ export function MachineCard({
     currentTimeMs,
   );
   const alertTitle = isKeyAlert ? "Key Active For" : "Paused For";
-  const alertChipLabel = isKeyAlert
-    ? "Single-machine key alert"
-    : "Single-machine alert";
+  const alertChipLabel = isKeyAlert ? "Key Active" : "Single-machine alert";
   const alertTimerClassName = isKeyAlert
-    ? "machine-overview-shop-key-timer text-rose-950"
+    ? "text-rose-950"
     : "machine-overview-shop-pause-timer text-amber-950";
   const reasonLabel = machine.pauseReason ?? "No pause reason from API";
   const pauseCountLabel = String(Math.max(0, machine.pauseCount));
@@ -109,7 +107,6 @@ export function MachineCard({
         "machine-overview-shop-card relative flex h-full min-h-[clamp(260px,27vh,350px)] w-full flex-col overflow-hidden rounded-[26px] border p-[clamp(14px,0.92vw,18px)] text-left",
         surfaceClassMap[machine.variant],
         isPaused && "machine-overview-shop-card--pause",
-        isKeyAlert && "machine-overview-shop-card--key",
       )}
     >
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -213,16 +210,16 @@ export function MachineCard({
                 {alertTimerLabel}
               </p>
             </div>
-            <span
-              className={cn(
-                "rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em]",
-                isKeyAlert
-                  ? "border border-rose-200 bg-rose-50 text-rose-700"
-                  : "border border-amber-200 bg-amber-50 text-amber-700",
-              )}
-            >
-              {alertChipLabel}
-            </span>
+            {isKeyAlert ? (
+              <span className="machine-overview-shop-key-button inline-flex items-center gap-1.5 rounded-full border border-rose-300 bg-rose-600 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-white shadow-[0_14px_26px_-20px_rgba(225,29,72,0.85)]">
+                <Key className="h-3.5 w-3.5" />
+                {alertChipLabel}
+              </span>
+            ) : (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+                {alertChipLabel}
+              </span>
+            )}
           </div>
 
           {isPaused ? (
