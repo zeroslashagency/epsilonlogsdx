@@ -20,6 +20,7 @@ import type {
 
 const iconMap: Record<MachineCardVariant, LucideIcon> = {
   production: Factory,
+  idle: Factory,
   setting: Settings,
   calibration: Gauge,
   pause: PauseCircle,
@@ -31,6 +32,8 @@ const iconMap: Record<MachineCardVariant, LucideIcon> = {
 const surfaceClassMap: Record<MachineCardVariant, string> = {
   production:
     "border-emerald-300/80 bg-[linear-gradient(145deg,rgba(239,255,248,0.96),rgba(239,252,246,0.78))] shadow-[0_24px_55px_-36px_rgba(16,185,129,0.6)]",
+  idle:
+    "border-slate-200/90 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] shadow-[0_24px_55px_-40px_rgba(15,23,42,0.16)]",
   setting:
     "border-violet-300/70 bg-[linear-gradient(145deg,rgba(250,247,255,0.96),rgba(244,240,255,0.78))] shadow-[0_24px_55px_-36px_rgba(139,92,246,0.4)]",
   calibration:
@@ -47,6 +50,7 @@ const surfaceClassMap: Record<MachineCardVariant, string> = {
 
 const badgeClassMap: Record<MachineCardVariant, string> = {
   production: "border-emerald-300/90 bg-emerald-50/95 text-emerald-700",
+  idle: "border-slate-200/90 bg-white text-slate-600",
   setting: "border-violet-300/90 bg-violet-50/95 text-violet-700",
   calibration: "border-sky-300/90 bg-sky-50/95 text-sky-700",
   pause: "border-amber-300 bg-white/95 text-amber-700",
@@ -57,6 +61,7 @@ const badgeClassMap: Record<MachineCardVariant, string> = {
 
 const statusClassMap: Record<MachineCardRecord["statusLabel"], string> = {
   LIVE: "border-emerald-300/90 bg-emerald-50/95 text-emerald-700",
+  IDLE: "border-slate-200/90 bg-white text-slate-600",
   PROCESSING: "border-amber-300 bg-amber-50/95 text-amber-700",
   COMPLETE: "border-sky-300/90 bg-sky-50/95 text-sky-700",
   PAUSED: "border-amber-300 bg-white/95 text-amber-700",

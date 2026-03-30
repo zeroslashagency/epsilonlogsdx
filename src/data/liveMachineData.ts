@@ -25,6 +25,7 @@ import type {
 
 type MachineStatus =
   | "LIVE"
+  | "IDLE"
   | "SETTING"
   | "MAINTENANCE"
   | "CALIBRATION"
@@ -113,6 +114,7 @@ interface MachineReportAccumulator {
 
 const ACTIVE_ACTIONS = new Set(["SPINDLE_ON", "WO_START", "WO_RESUME"]);
 const STOPPED_ACTIONS = new Set(["SPINDLE_OFF", "WO_STOP"]);
+const CONNECTIVITY_ACTIONS = new Set(["WIFI_ON", "WIFI_OFF"]);
 const LIVE_WINDOW_MS = 15 * 60 * 1000;
 const OFFLINE_WINDOW_MS = 2 * 60 * 60 * 1000;
 const WO_OVERVIEW_STATUS_PRIORITY: Record<WoExecutionStatus, number> = {
@@ -390,7 +392,15 @@ function buildMachineSnapshot(
     };
   }
 
-  if (latestAction && (ACTIVE_ACTIONS.has(latestAction) || ageMs <= LIVE_WINDOW_MS)) {
+  const hasWorkOrderContext =
+    snapshot.currentWoInternalId !== null || snapshot.currentWoDisplayId !== null;
+  const hasRecentWorkOrderActivity =
+    hasWorkOrderContext &&
+    !!latestAction &&
+    !CONNECTIVITY_ACTIONS.has(latestAction) &&
+    ageMs <= LIVE_WINDOW_MS;
+
+  if (latestAction && (ACTIVE_ACTIONS.has(latestAction) || hasRecentWorkOrderActivity)) {
     return {
       ...snapshot,
       status: "LIVE",
@@ -404,15 +414,17 @@ function buildMachineSnapshot(
   if (latestAction && STOPPED_ACTIONS.has(latestAction)) {
     return {
       ...snapshot,
-      status: "LIVE",
-      statusMessage: "Machine is reachable and the current WO is completed.",
+      status: "IDLE",
+      statusMessage: "Last work order is complete. Machine is waiting for the next WO.",
     };
   }
 
   return {
     ...snapshot,
-    status: "LIVE",
-    statusMessage: "Machine is waiting for the next event.",
+    status: "IDLE",
+    statusMessage: hasWorkOrderContext
+      ? "Machine is waiting for the next work order event."
+      : "Machine is online with no active work order.",
   };
 }
 
@@ -446,6 +458,9 @@ function resolveCardVariant(snapshot: MachineSnapshot): MachineCardVariant {
   }
   if (snapshot.status === "OFFLINE" || snapshot.status === "ERROR") {
     return "offline";
+  }
+  if (snapshot.status === "IDLE") {
+    return "idle";
   }
   return "production";
 }
@@ -484,6 +499,9 @@ function resolveStatusLabel(snapshot: MachineSnapshot): MachineCardRecord["statu
   }
   if (snapshot.status === "OFFLINE") {
     return "OFFLINE";
+  }
+  if (snapshot.status === "IDLE") {
+    return "IDLE";
   }
   return "LIVE";
 }
@@ -541,6 +559,10 @@ function formatFallbackStatus(snapshot: MachineSnapshot): string {
 
   if (snapshot.status === "OFFLINE") {
     return "Offline";
+  }
+
+  if (snapshot.status === "IDLE") {
+    return "Idle";
   }
 
   if (snapshot.status === "PAUSED") {

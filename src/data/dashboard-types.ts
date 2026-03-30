@@ -1,5 +1,6 @@
 export type MachineCardVariant =
   | "production"
+  | "idle"
   | "setting"
   | "calibration"
   | "pause"
@@ -9,6 +10,7 @@ export type MachineCardVariant =
 
 export type MachineStatusLabel =
   | "LIVE"
+  | "IDLE"
   | "PROCESSING"
   | "COMPLETE"
   | "PAUSED"
